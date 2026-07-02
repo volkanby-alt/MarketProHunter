@@ -9,6 +9,7 @@ public sealed class MainForm : Form
     private readonly TextBox _keywordTextBox = new();
     private readonly CheckedListBox _categoryListBox = new();
     private readonly NumericUpDown _pagesNumeric = new();
+    private readonly NumericUpDown _parallelNumeric = new();
     private readonly NumericUpDown _minPriceNumeric = new();
     private readonly NumericUpDown _maxPriceNumeric = new();
     private readonly TextBox _zipTextBox = new();
@@ -53,13 +54,13 @@ public sealed class MainForm : Form
         var settingsPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 8,
+            ColumnCount = 9,
             RowCount = 2
         };
 
-        for (var i = 0; i < 8; i++)
+        for (var i = 0; i < 9; i++)
         {
-            settingsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12.5f));
+            settingsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 11.11f));
         }
 
         _keywordTextBox.Text = "";
@@ -68,6 +69,9 @@ public sealed class MainForm : Form
         _pagesNumeric.Minimum = 1;
         _pagesNumeric.Maximum = 100;
         _pagesNumeric.Value = 3;
+        _parallelNumeric.Minimum = 1;
+        _parallelNumeric.Maximum = 8;
+        _parallelNumeric.Value = 3;
         _minPriceNumeric.Minimum = 1;
         _minPriceNumeric.Maximum = 1000;
         _minPriceNumeric.Value = 9;
@@ -83,13 +87,14 @@ public sealed class MainForm : Form
 
         AddLabeledControl(settingsPanel, "Ekstra Arama", _keywordTextBox, 0, 0);
         AddLabeledControl(settingsPanel, "Sayfa", _pagesNumeric, 1, 0);
-        AddLabeledControl(settingsPanel, "Min $", _minPriceNumeric, 2, 0);
-        AddLabeledControl(settingsPanel, "Max $", _maxPriceNumeric, 3, 0);
-        AddLabeledControl(settingsPanel, "ZIP", _zipTextBox, 4, 0);
+        AddLabeledControl(settingsPanel, "Paralel", _parallelNumeric, 2, 0);
+        AddLabeledControl(settingsPanel, "Min $", _minPriceNumeric, 3, 0);
+        AddLabeledControl(settingsPanel, "Max $", _maxPriceNumeric, 4, 0);
+        AddLabeledControl(settingsPanel, "ZIP", _zipTextBox, 5, 0);
 
-        settingsPanel.Controls.Add(_amazonChoiceCheckBox, 5, 1);
-        settingsPanel.Controls.Add(_lowStockCheckBox, 6, 1);
-        settingsPanel.Controls.Add(_usuallyKeepCheckBox, 7, 1);
+        settingsPanel.Controls.Add(_amazonChoiceCheckBox, 6, 1);
+        settingsPanel.Controls.Add(_lowStockCheckBox, 7, 1);
+        settingsPanel.Controls.Add(_usuallyKeepCheckBox, 8, 1);
 
         _startButton.Text = "Başlat";
         _startButton.Height = 30;
@@ -100,12 +105,12 @@ public sealed class MainForm : Form
         _stopButton.Enabled = false;
         _stopButton.Click += (_, _) => _cancellationTokenSource?.Cancel();
 
-        settingsPanel.Controls.Add(_startButton, 5, 0);
-        settingsPanel.Controls.Add(_stopButton, 6, 0);
+        settingsPanel.Controls.Add(_startButton, 6, 0);
+        settingsPanel.Controls.Add(_stopButton, 7, 0);
 
         _statusLabel.Text = "Hazır";
         _statusLabel.AutoSize = true;
-        settingsPanel.Controls.Add(_statusLabel, 7, 0);
+        settingsPanel.Controls.Add(_statusLabel, 8, 0);
 
         var categoryPanel = new GroupBox
         {
@@ -191,6 +196,7 @@ public sealed class MainForm : Form
         _resultsGrid.Rows.Clear();
         _logTextBox.Clear();
         AppendLog($"Toplam anahtar kelime: {keywords.Count}");
+        AppendLog($"Paralel görev sayısı: {_parallelNumeric.Value}");
         SetRunningState(true);
         _cancellationTokenSource = new CancellationTokenSource();
 
@@ -199,6 +205,7 @@ public sealed class MainForm : Form
             ZipCode = _zipTextBox.Text.Trim(),
             MinPrice = _minPriceNumeric.Value,
             MaxPrice = _maxPriceNumeric.Value,
+            MaxParallelSearches = (int)_parallelNumeric.Value,
             RequireAmazonChoice = _amazonChoiceCheckBox.Checked,
             ExcludeLowStock = _lowStockCheckBox.Checked,
             ExcludeUsuallyKeepItem = _usuallyKeepCheckBox.Checked
@@ -274,6 +281,7 @@ public sealed class MainForm : Form
         _stopButton.Enabled = running;
         _progressBar.Visible = running;
         _categoryListBox.Enabled = !running;
+        _parallelNumeric.Enabled = !running;
         if (running)
         {
             _statusLabel.Text = "Çalışıyor...";
