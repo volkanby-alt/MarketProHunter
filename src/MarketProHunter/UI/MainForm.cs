@@ -2,6 +2,7 @@ using MarketProHunter.Amazon;
 using MarketProHunter.Categories;
 using MarketProHunter.Decisions;
 using MarketProHunter.Models;
+using MarketProHunter.Profit;
 
 namespace MarketProHunter.UI;
 
@@ -19,6 +20,10 @@ public sealed class MainForm : Form
     private readonly CheckBox _usuallyKeepCheckBox = new();
     private readonly ComboBox _recommendationFilter = new();
     private readonly NumericUpDown _minOverallFilter = new();
+    private readonly NumericUpDown _ebayFeePercentNumeric = new();
+    private readonly NumericUpDown _promotedPercentNumeric = new();
+    private readonly NumericUpDown _targetProfitPercentNumeric = new();
+    private readonly NumericUpDown _minNetProfitNumeric = new();
     private readonly Button _applyFilterButton = new();
     private readonly Button _clearFilterButton = new();
     private readonly Button _favoriteButton = new();
@@ -39,8 +44,8 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "MarketProHunter - Smart Product Analyzer";
-        Width = 1480;
-        Height = 920;
+        Width = 1500;
+        Height = 940;
         StartPosition = FormStartPosition.CenterScreen;
         BuildLayout();
     }
@@ -50,7 +55,7 @@ public sealed class MainForm : Form
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(10) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 115));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 62));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
@@ -73,7 +78,7 @@ public sealed class MainForm : Form
         detailPanel.Controls.Add(BuildDecisionButtonPanel(), 0, 0);
         detailPanel.Controls.Add(_detailTextBox, 0, 1);
 
-        var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterDistance = 1000 };
+        var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterDistance = 1040 };
         split.Panel1.Controls.Add(_resultsGrid);
         split.Panel2.Controls.Add(detailPanel);
 
@@ -139,21 +144,45 @@ public sealed class MainForm : Form
 
     private GroupBox BuildFilterPanel()
     {
-        var group = new GroupBox { Text = "Akıllı analiz filtreleri", Dock = DockStyle.Fill };
-        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 1, Padding = new Padding(5) };
-        for (var i = 0; i < 6; i++) panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16.66f));
+        var group = new GroupBox { Text = "Akıllı analiz ve kâr ayarları", Dock = DockStyle.Fill };
+        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 10, RowCount = 1, Padding = new Padding(5) };
+        for (var i = 0; i < 10; i++) panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10f));
         _recommendationFilter.DropDownStyle = ComboBoxStyle.DropDownList;
         _recommendationFilter.Items.AddRange(new object[] { "All", "Upload", "Review", "Caution", "Reject", "Favorite", "Profitable" });
         _recommendationFilter.SelectedIndex = 0;
         _minOverallFilter.Minimum = 0; _minOverallFilter.Maximum = 100; _minOverallFilter.Value = 0;
+        SetupMoneyNumeric(_ebayFeePercentNumeric, 0, 30, 13.25m);
+        SetupMoneyNumeric(_promotedPercentNumeric, 0, 20, 5m);
+        SetupMoneyNumeric(_targetProfitPercentNumeric, 0, 50, 12m);
+        SetupMoneyNumeric(_minNetProfitNumeric, 0, 100, 2m);
         _applyFilterButton.Text = "Filtrele"; _applyFilterButton.Click += (_, _) => RefreshGrid();
         _clearFilterButton.Text = "Temizle"; _clearFilterButton.Click += (_, _) => { _recommendationFilter.SelectedIndex = 0; _minOverallFilter.Value = 0; RefreshGrid(); };
-        AddLabeledControl(panel, "Recommendation", _recommendationFilter, 0, 0);
-        AddLabeledControl(panel, "Min Overall", _minOverallFilter, 1, 0);
-        panel.Controls.Add(_applyFilterButton, 2, 0); panel.Controls.Add(_clearFilterButton, 3, 0);
+        AddLabeledControl(panel, "Filter", _recommendationFilter, 0, 0);
+        AddLabeledControl(panel, "Min Score", _minOverallFilter, 1, 0);
+        AddLabeledControl(panel, "eBay %", _ebayFeePercentNumeric, 2, 0);
+        AddLabeledControl(panel, "Promoted %", _promotedPercentNumeric, 3, 0);
+        AddLabeledControl(panel, "Target %", _targetProfitPercentNumeric, 4, 0);
+        AddLabeledControl(panel, "Min Net $", _minNetProfitNumeric, 5, 0);
+        panel.Controls.Add(_applyFilterButton, 6, 0); panel.Controls.Add(_clearFilterButton, 7, 0);
         group.Controls.Add(panel);
         return group;
     }
+
+    private static void SetupMoneyNumeric(NumericUpDown numeric, decimal min, decimal max, decimal value)
+    {
+        numeric.Minimum = min; numeric.Maximum = max; numeric.DecimalPlaces = 2; numeric.Increment = 0.25m; numeric.Value = value;
+    }
+
+    private ProfitSettings BuildProfitSettings() => new()
+    {
+        EbayFinalValueFeePercent = _ebayFeePercentNumeric.Value,
+        PromotedPercent = _promotedPercentNumeric.Value,
+        TargetProfitPercent = _targetProfitPercentNumeric.Value,
+        MinimumNetProfit = _minNetProfitNumeric.Value,
+        EbayFixedFee = ProfitSettings.Default.EbayFixedFee,
+        AmazonTaxPercent = 0m,
+        ShippingCost = 0m
+    };
 
     private static void AddLabeledControl(TableLayoutPanel panel, string label, Control control, int column, int row)
     {
@@ -167,23 +196,10 @@ public sealed class MainForm : Form
         _resultsGrid.Dock = DockStyle.Fill; _resultsGrid.ReadOnly = true; _resultsGrid.AllowUserToAddRows = false; _resultsGrid.AllowUserToDeleteRows = false;
         _resultsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; _resultsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _resultsGrid.SelectionChanged += (_, _) => ShowSelectedProductDetails();
-        _resultsGrid.Columns.Add("fav", "Fav");
-        _resultsGrid.Columns.Add("overall", "Overall");
-        _resultsGrid.Columns.Add("rec", "Rec");
-        _resultsGrid.Columns.Add("sell", "eBay Sell");
-        _resultsGrid.Columns.Add("net", "Net $");
-        _resultsGrid.Columns.Add("margin", "Margin %");
-        _resultsGrid.Columns.Add("profitDecision", "Profit");
-        _resultsGrid.Columns.Add("stars", "Stars");
-        _resultsGrid.Columns.Add("safety", "Safety");
-        _resultsGrid.Columns.Add("sales", "Sales");
-        _resultsGrid.Columns.Add("profitScore", "ProfitScore");
-        _resultsGrid.Columns.Add("asin", "ASIN");
-        _resultsGrid.Columns.Add("title", "Title");
-        _resultsGrid.Columns.Add("brand", "Brand");
-        _resultsGrid.Columns.Add("price", "Amazon $");
-        _resultsGrid.Columns.Add("keyword", "Keyword");
-        _resultsGrid.Columns.Add("url", "URL");
+        _resultsGrid.Columns.Add("fav", "Fav"); _resultsGrid.Columns.Add("overall", "Overall"); _resultsGrid.Columns.Add("rec", "Rec");
+        _resultsGrid.Columns.Add("sell", "eBay Sell"); _resultsGrid.Columns.Add("net", "Net $"); _resultsGrid.Columns.Add("margin", "Margin %"); _resultsGrid.Columns.Add("profitDecision", "Profit");
+        _resultsGrid.Columns.Add("stars", "Stars"); _resultsGrid.Columns.Add("safety", "Safety"); _resultsGrid.Columns.Add("sales", "Sales"); _resultsGrid.Columns.Add("profitScore", "ProfitScore");
+        _resultsGrid.Columns.Add("asin", "ASIN"); _resultsGrid.Columns.Add("title", "Title"); _resultsGrid.Columns.Add("brand", "Brand"); _resultsGrid.Columns.Add("price", "Amazon $"); _resultsGrid.Columns.Add("keyword", "Keyword"); _resultsGrid.Columns.Add("url", "URL");
     }
 
     private async Task StartSearchAsync()
@@ -194,10 +210,11 @@ public sealed class MainForm : Form
         AppendLog($"Toplam anahtar kelime: {keywords.Count}"); AppendLog($"Paralel görev sayısı: {_parallelNumeric.Value}");
         SetRunningState(true); _cancellationTokenSource = new CancellationTokenSource();
         var settings = new SearchSettings { ZipCode = _zipTextBox.Text.Trim(), MinPrice = _minPriceNumeric.Value, MaxPrice = _maxPriceNumeric.Value, MaxParallelSearches = (int)_parallelNumeric.Value, RequireAmazonChoice = _amazonChoiceCheckBox.Checked, ExcludeLowStock = _lowStockCheckBox.Checked, ExcludeUsuallyKeepItem = _usuallyKeepCheckBox.Checked };
+        var profitSettings = BuildProfitSettings();
         var service = new AmazonSearchService(); var logProgress = new Progress<string>(AppendLog); var productProgress = new Progress<ProductResult>(AddProductRow);
         try
         {
-            var result = await service.RunManyAsync(keywords, (int)_pagesNumeric.Value, settings, logProgress, productProgress, _cancellationTokenSource.Token);
+            var result = await service.RunManyAsync(keywords, (int)_pagesNumeric.Value, settings, profitSettings, logProgress, productProgress, _cancellationTokenSource.Token);
             _statusLabel.Text = $"Bitti: {result.AcceptedCount} uygun ürün"; AppendLog($"CSV dosyası: {result.OutputPath}");
             MessageBox.Show($"Tarama bitti. Uygun ürün: {result.AcceptedCount}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -251,11 +268,7 @@ public sealed class MainForm : Form
 
     private void AddProductRowToGrid(ProductResult product)
     {
-        var index = _resultsGrid.Rows.Add(
-            _decisionStore.IsFavorite(product.Asin) ? "⭐" : "", product.OverallScore, product.Recommendation,
-            $"${product.RecommendedSalePrice}", $"${product.NetProfit}", product.NetMarginPercent, product.ProfitDecision,
-            product.Stars, product.SafetyScore, product.SalesScore, product.ProfitScore, product.Asin, product.Title, product.Brand,
-            $"${product.Price}", product.SearchKeyword, product.ProductUrl);
+        var index = _resultsGrid.Rows.Add(_decisionStore.IsFavorite(product.Asin) ? "⭐" : "", product.OverallScore, product.Recommendation, $"${product.RecommendedSalePrice}", $"${product.NetProfit}", product.NetMarginPercent, product.ProfitDecision, product.Stars, product.SafetyScore, product.SalesScore, product.ProfitScore, product.Asin, product.Title, product.Brand, $"${product.Price}", product.SearchKeyword, product.ProductUrl);
         var row = _resultsGrid.Rows[index]; row.Tag = product;
         row.DefaultCellStyle.BackColor = product.OverallScore switch { >= 90 => Color.Honeydew, >= 75 => Color.LightYellow, >= 60 => Color.Moccasin, _ => Color.MistyRose };
     }
