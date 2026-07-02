@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Threading;
 using MarketProHunter.Export;
 using MarketProHunter.Filters;
 using MarketProHunter.Models;
@@ -43,57 +45,72 @@ public sealed class AmazonSearchService
 
         var veroFilter = new VeroBrandFilter("config/vero-brands.txt");
         var productFilter = new ProductFilter(settings, veroFilter);
-        var client = new AmazonSearchClient(settings);
-        var parser = new AmazonSearchParser();
         var exporter = new CsvExporter();
-        var accepted = new List<ProductResult>();
-        var acceptedAsins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var accepted = new ConcurrentBag<ProductResult>();
+        var acceptedAsins = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         var scannedCount = 0;
         var skippedCount = 0;
+        var maxParallel = Math.Clamp(settings.MaxParallelSearches, 1, 8);
 
-        foreach (var keyword in keywordList)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            logProgress?.Report($"Arama başlıyor: {keyword}");
+        logProgress?.Report($"Paralel tarama başlıyor. Anahtar kelime: {keywordList.Count}, paralel görev: {maxParallel}");
 
-            for (var page = 1; page <= maxPages; page++)
+        await Parallel.ForEachAsync(
+            keywordList,
+            new ParallelOptions
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                logProgress?.Report($"{keyword} | Sayfa: {page}/{maxPages}");
+                MaxDegreeOfParallelism = maxParallel,
+                CancellationToken = cancellationToken
+            },
+            async (keyword, token) =>
+            {
+                var client = new AmazonSearchClient(settings);
+                var parser = new AmazonSearchParser();
+                logProgress?.Report($"Arama başlıyor: {keyword}");
 
-                var html = await client.FetchSearchPageAsync(keyword, page, cancellationToken);
-                var products = parser.Parse(html, keyword, page);
-                logProgress?.Report($"{keyword} | Sayfa {page}: {products.Count} ürün kartı bulundu.");
-
-                foreach (var product in products)
+                for (var page = 1; page <= maxPages; page++)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    scannedCount++;
-                    var decision = productFilter.Evaluate(product);
+                    token.ThrowIfCancellationRequested();
+                    logProgress?.Report($"{keyword} | Sayfa: {page}/{maxPages}");
 
-                    if (decision.Accepted && acceptedAsins.Add(product.Asin))
+                    var html = await client.FetchSearchPageAsync(keyword, page, token);
+                    var products = parser.Parse(html, keyword, page);
+                    logProgress?.Report($"{keyword} | Sayfa {page}: {products.Count} ürün kartı bulundu.");
+
+                    foreach (var product in products)
                     {
-                        var acceptedProduct = product with { Notes = decision.Reason };
-                        accepted.Add(acceptedProduct);
-                        acceptedProgress?.Report(acceptedProduct);
-                        logProgress?.Report($"OK  {product.Asin} | ${product.Price} | {Shorten(product.Title)}");
+                        token.ThrowIfCancellationRequested();
+                        Interlocked.Increment(ref scannedCount);
+                        var decision = productFilter.Evaluate(product);
+
+                        if (decision.Accepted && acceptedAsins.TryAdd(product.Asin, 0))
+                        {
+                            var acceptedProduct = product with { Notes = decision.Reason };
+                            accepted.Add(acceptedProduct);
+                            acceptedProgress?.Report(acceptedProduct);
+                            logProgress?.Report($"OK  {product.Asin} | ${product.Price} | {Shorten(product.Title)}");
+                        }
+                        else
+                        {
+                            Interlocked.Increment(ref skippedCount);
+                            var reason = decision.Accepted ? "Tekrar eden ASIN" : decision.Reason;
+                            logProgress?.Report($"SKIP {product.Asin} | {reason}");
+                        }
                     }
-                    else
-                    {
-                        skippedCount++;
-                        var reason = decision.Accepted ? "Tekrar eden ASIN" : decision.Reason;
-                        logProgress?.Report($"SKIP {product.Asin} | {reason}");
-                    }
+
+                    await Task.Delay(settings.DelayBetweenPagesMs, token);
                 }
+            });
 
-                await Task.Delay(settings.DelayBetweenPagesMs, cancellationToken);
-            }
-        }
+        var orderedAccepted = accepted
+            .OrderBy(p => p.SearchKeyword)
+            .ThenBy(p => p.Page)
+            .ThenBy(p => p.Price)
+            .ToList();
 
         var outputPath = Path.Combine(AppContext.BaseDirectory, "output", $"amazon_results_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
-        await exporter.WriteAsync(outputPath, accepted, cancellationToken);
+        await exporter.WriteAsync(outputPath, orderedAccepted, cancellationToken);
 
-        return new SearchRunResult(scannedCount, accepted.Count, skippedCount, outputPath);
+        return new SearchRunResult(scannedCount, orderedAccepted.Count, skippedCount, outputPath);
     }
 
     private static string Shorten(string value)
