@@ -29,8 +29,8 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "MarketProHunter - Amazon Search Engine";
-        Width = 1180;
-        Height = 820;
+        Width = 1280;
+        Height = 860;
         StartPosition = FormStartPosition.CenterScreen;
         BuildLayout();
     }
@@ -176,6 +176,12 @@ public sealed class MainForm : Form
         _resultsGrid.AllowUserToDeleteRows = false;
         _resultsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _resultsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _resultsGrid.Columns.Add("overall", "Overall");
+        _resultsGrid.Columns.Add("rec", "Rec");
+        _resultsGrid.Columns.Add("stars", "Stars");
+        _resultsGrid.Columns.Add("safety", "Safety");
+        _resultsGrid.Columns.Add("sales", "Sales");
+        _resultsGrid.Columns.Add("profit", "Profit");
         _resultsGrid.Columns.Add("asin", "ASIN");
         _resultsGrid.Columns.Add("title", "Title");
         _resultsGrid.Columns.Add("brand", "Brand");
@@ -295,6 +301,27 @@ public sealed class MainForm : Form
 
     private void AddProductRow(ProductResult product)
     {
-        _resultsGrid.Rows.Add(product.Asin, product.Title, product.Brand, $"${product.Price}", product.SearchKeyword, product.ProductUrl);
+        var index = _resultsGrid.Rows.Add(
+            product.OverallScore,
+            product.Recommendation,
+            product.Stars,
+            product.SafetyScore,
+            product.SalesScore,
+            product.ProfitScore,
+            product.Asin,
+            product.Title,
+            product.Brand,
+            $"${product.Price}",
+            product.SearchKeyword,
+            product.ProductUrl);
+
+        var row = _resultsGrid.Rows[index];
+        row.DefaultCellStyle.BackColor = product.OverallScore switch
+        {
+            >= 90 => Color.Honeydew,
+            >= 75 => Color.LightYellow,
+            >= 60 => Color.Moccasin,
+            _ => Color.MistyRose
+        };
     }
 }
