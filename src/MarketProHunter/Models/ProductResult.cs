@@ -20,5 +20,11 @@ public sealed record ProductResult
     public int OverallScore { get; init; }
     public string Recommendation { get; init; } = "";
     public string Stars { get; init; } = "";
+    public decimal RecommendedSalePrice { get; init; }
+    public decimal EbayFee { get; init; }
+    public decimal PromotedFee { get; init; }
+    public decimal NetProfit { get; init; }
+    public decimal NetMarginPercent { get; init; }
+    public string ProfitDecision { get; init; } = "";
     public string Notes { get; init; } = "";
 }
