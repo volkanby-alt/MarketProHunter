@@ -1,0 +1,25 @@
+# MarketProHunter VeRO / yüksek riskli marka listesi
+# Her satıra bir marka yazın. Bu liste ilk sürüm için başlangıç listesidir.
+# Zamanla kendi deneyiminize göre güncellenecek.
+
+Apple
+Samsung
+Nike
+Adidas
+Dyson
+Shark
+Lego
+Disney
+Marvel
+Nintendo
+Sony
+Microsoft
+HP
+Dell
+Canon
+Brother
+3M
+Vevor
+Delphi
+Mr. Clean
+Mrs. Meyer's
