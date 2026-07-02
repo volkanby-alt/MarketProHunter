@@ -1,5 +1,6 @@
 using MarketProHunter.Amazon;
 using MarketProHunter.Categories;
+using MarketProHunter.Decisions;
 using MarketProHunter.Models;
 
 namespace MarketProHunter.UI;
@@ -20,6 +21,9 @@ public sealed class MainForm : Form
     private readonly NumericUpDown _minOverallFilter = new();
     private readonly Button _applyFilterButton = new();
     private readonly Button _clearFilterButton = new();
+    private readonly Button _favoriteButton = new();
+    private readonly Button _rejectAsinButton = new();
+    private readonly Button _rejectBrandButton = new();
     private readonly Button _startButton = new();
     private readonly Button _stopButton = new();
     private readonly ProgressBar _progressBar = new();
@@ -29,6 +33,7 @@ public sealed class MainForm : Form
     private readonly Label _statusLabel = new();
     private readonly IReadOnlyList<KeywordCategory> _categories = KeywordCategoryProvider.GetDefaultCategories();
     private readonly List<ProductResult> _allResults = new();
+    private readonly UserDecisionStore _decisionStore = new();
 
     private CancellationTokenSource? _cancellationTokenSource;
 
@@ -75,6 +80,17 @@ public sealed class MainForm : Form
         _detailTextBox.Font = new Font("Consolas", 10);
         _detailTextBox.Text = "Bir ürün seçildiğinde detaylı analiz burada görünecek.";
 
+        var detailPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2
+        };
+        detailPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        detailPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        detailPanel.Controls.Add(BuildDecisionButtonPanel(), 0, 0);
+        detailPanel.Controls.Add(_detailTextBox, 0, 1);
+
         var resultSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
@@ -82,7 +98,7 @@ public sealed class MainForm : Form
             SplitterDistance = 930
         };
         resultSplit.Panel1.Controls.Add(_resultsGrid);
-        resultSplit.Panel2.Controls.Add(_detailTextBox);
+        resultSplit.Panel2.Controls.Add(detailPanel);
 
         _logTextBox.Dock = DockStyle.Fill;
         _logTextBox.Multiline = true;
@@ -97,6 +113,33 @@ public sealed class MainForm : Form
         root.Controls.Add(_logTextBox, 0, 5);
 
         Controls.Add(root);
+    }
+
+    private FlowLayoutPanel BuildDecisionButtonPanel()
+    {
+        var panel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            Padding = new Padding(2)
+        };
+
+        _favoriteButton.Text = "⭐ Favorite";
+        _favoriteButton.Width = 100;
+        _favoriteButton.Click += (_, _) => FavoriteSelectedProduct();
+
+        _rejectAsinButton.Text = "Reject ASIN";
+        _rejectAsinButton.Width = 110;
+        _rejectAsinButton.Click += (_, _) => RejectSelectedAsin();
+
+        _rejectBrandButton.Text = "Reject Brand";
+        _rejectBrandButton.Width = 115;
+        _rejectBrandButton.Click += (_, _) => RejectSelectedBrand();
+
+        panel.Controls.Add(_favoriteButton);
+        panel.Controls.Add(_rejectAsinButton);
+        panel.Controls.Add(_rejectBrandButton);
+        return panel;
     }
 
     private TableLayoutPanel BuildSettingsPanel()
@@ -160,7 +203,6 @@ public sealed class MainForm : Form
         _statusLabel.Text = "Hazır";
         _statusLabel.AutoSize = true;
         settingsPanel.Controls.Add(_statusLabel, 8, 0);
-
         return settingsPanel;
     }
 
@@ -208,7 +250,7 @@ public sealed class MainForm : Form
         }
 
         _recommendationFilter.DropDownStyle = ComboBoxStyle.DropDownList;
-        _recommendationFilter.Items.AddRange(new object[] { "All", "Upload", "Review", "Caution", "Reject" });
+        _recommendationFilter.Items.AddRange(new object[] { "All", "Upload", "Review", "Caution", "Reject", "Favorite" });
         _recommendationFilter.SelectedIndex = 0;
 
         _minOverallFilter.Minimum = 0;
@@ -230,7 +272,6 @@ public sealed class MainForm : Form
         AddLabeledControl(panel, "Min Overall", _minOverallFilter, 1, 0);
         panel.Controls.Add(_applyFilterButton, 2, 0);
         panel.Controls.Add(_clearFilterButton, 3, 0);
-
         group.Controls.Add(panel);
         return group;
     }
@@ -263,6 +304,7 @@ public sealed class MainForm : Form
         _resultsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _resultsGrid.SelectionChanged += (_, _) => ShowSelectedProductDetails();
 
+        _resultsGrid.Columns.Add("fav", "Fav");
         _resultsGrid.Columns.Add("overall", "Overall");
         _resultsGrid.Columns.Add("rec", "Rec");
         _resultsGrid.Columns.Add("stars", "Stars");
@@ -346,7 +388,6 @@ public sealed class MainForm : Form
     private IReadOnlyList<string> BuildKeywordList()
     {
         var keywords = new List<string>();
-
         foreach (var checkedItem in _categoryListBox.CheckedItems)
         {
             var categoryName = checkedItem.ToString();
@@ -359,25 +400,18 @@ public sealed class MainForm : Form
 
         if (!string.IsNullOrWhiteSpace(_keywordTextBox.Text))
         {
-            keywords.AddRange(
-                _keywordTextBox.Text
-                    .Split(new[] { ',', ';', Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            keywords.AddRange(_keywordTextBox.Text.Split(new[] { ',', ';', Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         }
 
-        return keywords
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        return keywords.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private bool PassesCurrentFilter(ProductResult product)
     {
-        var selectedRecommendation = _recommendationFilter.SelectedItem?.ToString() ?? "All";
-        if (selectedRecommendation != "All" && !product.Recommendation.Equals(selectedRecommendation, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
+        if (_decisionStore.IsRejected(product)) return false;
+        var selected = _recommendationFilter.SelectedItem?.ToString() ?? "All";
+        if (selected == "Favorite") return _decisionStore.IsFavorite(product.Asin);
+        if (selected != "All" && !product.Recommendation.Equals(selected, StringComparison.OrdinalIgnoreCase)) return false;
         return product.OverallScore >= _minOverallFilter.Value;
     }
 
@@ -398,29 +432,27 @@ public sealed class MainForm : Form
         _progressBar.Visible = running;
         _categoryListBox.Enabled = !running;
         _parallelNumeric.Enabled = !running;
-        if (running)
-        {
-            _statusLabel.Text = "Çalışıyor...";
-        }
+        if (running) _statusLabel.Text = "Çalışıyor...";
     }
 
-    private void AppendLog(string message)
-    {
-        _logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
-    }
+    private void AppendLog(string message) => _logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
 
     private void AddProductRow(ProductResult product)
     {
-        _allResults.Add(product);
-        if (PassesCurrentFilter(product))
+        if (_decisionStore.IsRejected(product))
         {
-            AddProductRowToGrid(product);
+            AppendLog($"SKIP {product.Asin} | Kullanıcı kara listesinde");
+            return;
         }
+
+        _allResults.Add(product);
+        if (PassesCurrentFilter(product)) AddProductRowToGrid(product);
     }
 
     private void AddProductRowToGrid(ProductResult product)
     {
         var index = _resultsGrid.Rows.Add(
+            _decisionStore.IsFavorite(product.Asin) ? "⭐" : "",
             product.OverallScore,
             product.Recommendation,
             product.Stars,
@@ -445,26 +477,56 @@ public sealed class MainForm : Form
         };
     }
 
-    private void ShowSelectedProductDetails()
-    {
-        if (_resultsGrid.SelectedRows.Count == 0 || _resultsGrid.SelectedRows[0].Tag is not ProductResult product)
-        {
-            return;
-        }
+    private ProductResult? GetSelectedProduct() => _resultsGrid.SelectedRows.Count == 0 ? null : _resultsGrid.SelectedRows[0].Tag as ProductResult;
 
-        _detailTextBox.Text = BuildDetailText(product);
+    private void FavoriteSelectedProduct()
+    {
+        var product = GetSelectedProduct();
+        if (product is null) return;
+        _decisionStore.AddFavorite(product);
+        AppendLog($"FAVORITE {product.Asin} | {product.Brand}");
+        RefreshGrid();
     }
 
-    private static string BuildDetailText(ProductResult product)
+    private void RejectSelectedAsin()
     {
-        var reasons = new List<string>();
-        reasons.Add(product.IsAmazonChoice ? "+ Amazon Choice" : "- Amazon Choice değil");
-        reasons.Add(product.HasLowStockWarning ? "- Stok az uyarısı var" : "+ Stok uyarısı yok");
-        reasons.Add(product.HasUsuallyKeepItemText ? "- Usually keep uyarısı var" : "+ Usually keep uyarısı yok");
-        reasons.Add(product.IsSponsored ? "- Sponsored sonuç" : "+ Organic sonuç");
-        reasons.Add(product.Price <= 60 ? "+ Fiyat iyi aralıkta" : "- Fiyat üst aralıkta");
+        var product = GetSelectedProduct();
+        if (product is null) return;
+        _decisionStore.RejectAsin(product);
+        AppendLog($"REJECT ASIN {product.Asin}");
+        RefreshGrid();
+    }
 
-        return $"ASIN: {product.Asin}{Environment.NewLine}" +
+    private void RejectSelectedBrand()
+    {
+        var product = GetSelectedProduct();
+        if (product is null) return;
+        if (MessageBox.Show($"{product.Brand} markasını kalıcı reddetmek istiyor musun?", "Reject Brand", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        _decisionStore.RejectBrand(product);
+        AppendLog($"REJECT BRAND {product.Brand}");
+        RefreshGrid();
+    }
+
+    private void ShowSelectedProductDetails()
+    {
+        var product = GetSelectedProduct();
+        if (product is null) return;
+        _detailTextBox.Text = BuildDetailText(product, _decisionStore.IsFavorite(product.Asin));
+    }
+
+    private static string BuildDetailText(ProductResult product, bool isFavorite)
+    {
+        var reasons = new List<string>
+        {
+            product.IsAmazonChoice ? "+ Amazon Choice" : "- Amazon Choice değil",
+            product.HasLowStockWarning ? "- Stok az uyarısı var" : "+ Stok uyarısı yok",
+            product.HasUsuallyKeepItemText ? "- Usually keep uyarısı var" : "+ Usually keep uyarısı yok",
+            product.IsSponsored ? "- Sponsored sonuç" : "+ Organic sonuç",
+            product.Price <= 60 ? "+ Fiyat iyi aralıkta" : "- Fiyat üst aralıkta"
+        };
+
+        return $"Favorite: {(isFavorite ? "YES ⭐" : "NO")}{Environment.NewLine}" +
+               $"ASIN: {product.Asin}{Environment.NewLine}" +
                $"Brand: {product.Brand}{Environment.NewLine}" +
                $"Price: ${product.Price}{Environment.NewLine}" +
                $"Keyword: {product.SearchKeyword}{Environment.NewLine}" +
