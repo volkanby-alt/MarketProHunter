@@ -15,7 +15,7 @@ public sealed class CsvExporter
         }
 
         var builder = new StringBuilder();
-        builder.AppendLine("OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,ProductUrl,Keyword,Page,Notes");
+        builder.AppendLine("OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,ProductUrl,Keyword,Page,Notes");
 
         foreach (var p in products)
         {
@@ -27,6 +27,13 @@ public sealed class CsvExporter
                 p.ProfitScore.ToString(CultureInfo.InvariantCulture),
                 Escape(p.Recommendation),
                 Escape(p.Stars),
+                p.Price.ToString(CultureInfo.InvariantCulture),
+                p.RecommendedSalePrice.ToString(CultureInfo.InvariantCulture),
+                p.EbayFee.ToString(CultureInfo.InvariantCulture),
+                p.PromotedFee.ToString(CultureInfo.InvariantCulture),
+                p.NetProfit.ToString(CultureInfo.InvariantCulture),
+                p.NetMarginPercent.ToString(CultureInfo.InvariantCulture),
+                Escape(p.ProfitDecision),
                 Escape(p.Asin),
                 Escape(p.Title),
                 Escape(p.Brand),
