@@ -3,6 +3,7 @@ using System.Threading;
 using MarketProHunter.Export;
 using MarketProHunter.Filters;
 using MarketProHunter.Models;
+using MarketProHunter.Profit;
 using MarketProHunter.Scoring;
 
 namespace MarketProHunter.Amazon;
@@ -47,6 +48,8 @@ public sealed class AmazonSearchService
         var veroFilter = new VeroBrandFilter("config/vero-brands.txt");
         var productFilter = new ProductFilter(settings, veroFilter);
         var scoringEngine = new ScoringEngine();
+        var profitEngine = new EbayProfitEngine();
+        var profitSettings = ProfitSettings.Default;
         var exporter = new CsvExporter();
         var accepted = new ConcurrentBag<ProductResult>();
         var acceptedAsins = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
@@ -87,6 +90,7 @@ public sealed class AmazonSearchService
                         if (decision.Accepted && acceptedAsins.TryAdd(product.Asin, 0))
                         {
                             var score = scoringEngine.Score(product);
+                            var profit = profitEngine.Calculate(product, profitSettings);
                             var acceptedProduct = product with
                             {
                                 SafetyScore = score.SafetyScore,
@@ -95,12 +99,18 @@ public sealed class AmazonSearchService
                                 OverallScore = score.OverallScore,
                                 Recommendation = score.Recommendation,
                                 Stars = score.Stars,
+                                RecommendedSalePrice = profit.RecommendedSalePrice,
+                                EbayFee = profit.EbayFee,
+                                PromotedFee = profit.PromotedFee,
+                                NetProfit = profit.NetProfit,
+                                NetMarginPercent = profit.NetMarginPercent,
+                                ProfitDecision = profit.ProfitDecision,
                                 Notes = decision.Reason
                             };
 
                             accepted.Add(acceptedProduct);
                             acceptedProgress?.Report(acceptedProduct);
-                            logProgress?.Report($"OK  {product.Asin} | Score {score.OverallScore} | {score.Recommendation} | ${product.Price} | {Shorten(product.Title)}");
+                            logProgress?.Report($"OK  {product.Asin} | Score {score.OverallScore} | eBay ${profit.RecommendedSalePrice} | Net ${profit.NetProfit} | {Shorten(product.Title)}");
                         }
                         else
                         {
@@ -116,6 +126,7 @@ public sealed class AmazonSearchService
 
         var orderedAccepted = accepted
             .OrderByDescending(p => p.OverallScore)
+            .ThenByDescending(p => p.NetProfit)
             .ThenByDescending(p => p.SafetyScore)
             .ThenBy(p => p.Price)
             .ToList();
