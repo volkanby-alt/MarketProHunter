@@ -3,6 +3,7 @@ using System.Threading;
 using MarketProHunter.Export;
 using MarketProHunter.Filters;
 using MarketProHunter.Models;
+using MarketProHunter.Scoring;
 
 namespace MarketProHunter.Amazon;
 
@@ -45,6 +46,7 @@ public sealed class AmazonSearchService
 
         var veroFilter = new VeroBrandFilter("config/vero-brands.txt");
         var productFilter = new ProductFilter(settings, veroFilter);
+        var scoringEngine = new ScoringEngine();
         var exporter = new CsvExporter();
         var accepted = new ConcurrentBag<ProductResult>();
         var acceptedAsins = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
@@ -84,10 +86,21 @@ public sealed class AmazonSearchService
 
                         if (decision.Accepted && acceptedAsins.TryAdd(product.Asin, 0))
                         {
-                            var acceptedProduct = product with { Notes = decision.Reason };
+                            var score = scoringEngine.Score(product);
+                            var acceptedProduct = product with
+                            {
+                                SafetyScore = score.SafetyScore,
+                                SalesScore = score.SalesScore,
+                                ProfitScore = score.ProfitScore,
+                                OverallScore = score.OverallScore,
+                                Recommendation = score.Recommendation,
+                                Stars = score.Stars,
+                                Notes = decision.Reason
+                            };
+
                             accepted.Add(acceptedProduct);
                             acceptedProgress?.Report(acceptedProduct);
-                            logProgress?.Report($"OK  {product.Asin} | ${product.Price} | {Shorten(product.Title)}");
+                            logProgress?.Report($"OK  {product.Asin} | Score {score.OverallScore} | {score.Recommendation} | ${product.Price} | {Shorten(product.Title)}");
                         }
                         else
                         {
@@ -102,8 +115,8 @@ public sealed class AmazonSearchService
             });
 
         var orderedAccepted = accepted
-            .OrderBy(p => p.SearchKeyword)
-            .ThenBy(p => p.Page)
+            .OrderByDescending(p => p.OverallScore)
+            .ThenByDescending(p => p.SafetyScore)
             .ThenBy(p => p.Price)
             .ToList();
 
