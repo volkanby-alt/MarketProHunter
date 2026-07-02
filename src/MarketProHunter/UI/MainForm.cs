@@ -16,21 +16,27 @@ public sealed class MainForm : Form
     private readonly CheckBox _amazonChoiceCheckBox = new();
     private readonly CheckBox _lowStockCheckBox = new();
     private readonly CheckBox _usuallyKeepCheckBox = new();
+    private readonly ComboBox _recommendationFilter = new();
+    private readonly NumericUpDown _minOverallFilter = new();
+    private readonly Button _applyFilterButton = new();
+    private readonly Button _clearFilterButton = new();
     private readonly Button _startButton = new();
     private readonly Button _stopButton = new();
     private readonly ProgressBar _progressBar = new();
     private readonly TextBox _logTextBox = new();
     private readonly DataGridView _resultsGrid = new();
+    private readonly TextBox _detailTextBox = new();
     private readonly Label _statusLabel = new();
     private readonly IReadOnlyList<KeywordCategory> _categories = KeywordCategoryProvider.GetDefaultCategories();
+    private readonly List<ProductResult> _allResults = new();
 
     private CancellationTokenSource? _cancellationTokenSource;
 
     public MainForm()
     {
-        Text = "MarketProHunter - Amazon Search Engine";
-        Width = 1280;
-        Height = 860;
+        Text = "MarketProHunter - Smart Product Analyzer";
+        Width = 1380;
+        Height = 900;
         StartPosition = FormStartPosition.CenterScreen;
         BuildLayout();
     }
@@ -41,16 +47,60 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 6,
             Padding = new Padding(10)
         };
 
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 115));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 62));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
 
+        var settingsPanel = BuildSettingsPanel();
+        var categoryPanel = BuildCategoryPanel();
+        var filterPanel = BuildFilterPanel();
+
+        _progressBar.Dock = DockStyle.Fill;
+        _progressBar.Style = ProgressBarStyle.Marquee;
+        _progressBar.Visible = false;
+
+        ConfigureResultsGrid();
+
+        _detailTextBox.Dock = DockStyle.Fill;
+        _detailTextBox.Multiline = true;
+        _detailTextBox.ScrollBars = ScrollBars.Vertical;
+        _detailTextBox.ReadOnly = true;
+        _detailTextBox.Font = new Font("Consolas", 10);
+        _detailTextBox.Text = "Bir ürün seçildiğinde detaylı analiz burada görünecek.";
+
+        var resultSplit = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Vertical,
+            SplitterDistance = 930
+        };
+        resultSplit.Panel1.Controls.Add(_resultsGrid);
+        resultSplit.Panel2.Controls.Add(_detailTextBox);
+
+        _logTextBox.Dock = DockStyle.Fill;
+        _logTextBox.Multiline = true;
+        _logTextBox.ScrollBars = ScrollBars.Vertical;
+        _logTextBox.ReadOnly = true;
+
+        root.Controls.Add(settingsPanel, 0, 0);
+        root.Controls.Add(categoryPanel, 0, 1);
+        root.Controls.Add(filterPanel, 0, 2);
+        root.Controls.Add(_progressBar, 0, 3);
+        root.Controls.Add(resultSplit, 0, 4);
+        root.Controls.Add(_logTextBox, 0, 5);
+
+        Controls.Add(root);
+    }
+
+    private TableLayoutPanel BuildSettingsPanel()
+    {
         var settingsPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -63,7 +113,6 @@ public sealed class MainForm : Form
             settingsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 11.11f));
         }
 
-        _keywordTextBox.Text = "";
         _keywordTextBox.PlaceholderText = "İsteğe bağlı ekstra arama kelimesi";
         _zipTextBox.Text = "07073";
         _pagesNumeric.Minimum = 1;
@@ -112,6 +161,11 @@ public sealed class MainForm : Form
         _statusLabel.AutoSize = true;
         settingsPanel.Controls.Add(_statusLabel, 8, 0);
 
+        return settingsPanel;
+    }
+
+    private GroupBox BuildCategoryPanel()
+    {
         var categoryPanel = new GroupBox
         {
             Text = "Kategoriler - seçilenlerin anahtar kelimeleri otomatik taranır",
@@ -129,25 +183,56 @@ public sealed class MainForm : Form
         }
 
         categoryPanel.Controls.Add(_categoryListBox);
+        return categoryPanel;
+    }
 
-        _progressBar.Dock = DockStyle.Fill;
-        _progressBar.Style = ProgressBarStyle.Marquee;
-        _progressBar.Visible = false;
+    private GroupBox BuildFilterPanel()
+    {
+        var group = new GroupBox
+        {
+            Text = "Akıllı analiz filtreleri",
+            Dock = DockStyle.Fill
+        };
 
-        ConfigureResultsGrid();
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 6,
+            RowCount = 1,
+            Padding = new Padding(5)
+        };
 
-        _logTextBox.Dock = DockStyle.Fill;
-        _logTextBox.Multiline = true;
-        _logTextBox.ScrollBars = ScrollBars.Vertical;
-        _logTextBox.ReadOnly = true;
+        for (var i = 0; i < 6; i++)
+        {
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16.66f));
+        }
 
-        root.Controls.Add(settingsPanel, 0, 0);
-        root.Controls.Add(categoryPanel, 0, 1);
-        root.Controls.Add(_progressBar, 0, 2);
-        root.Controls.Add(_resultsGrid, 0, 3);
-        root.Controls.Add(_logTextBox, 0, 4);
+        _recommendationFilter.DropDownStyle = ComboBoxStyle.DropDownList;
+        _recommendationFilter.Items.AddRange(new object[] { "All", "Upload", "Review", "Caution", "Reject" });
+        _recommendationFilter.SelectedIndex = 0;
 
-        Controls.Add(root);
+        _minOverallFilter.Minimum = 0;
+        _minOverallFilter.Maximum = 100;
+        _minOverallFilter.Value = 0;
+
+        _applyFilterButton.Text = "Filtrele";
+        _applyFilterButton.Click += (_, _) => RefreshGrid();
+
+        _clearFilterButton.Text = "Temizle";
+        _clearFilterButton.Click += (_, _) =>
+        {
+            _recommendationFilter.SelectedIndex = 0;
+            _minOverallFilter.Value = 0;
+            RefreshGrid();
+        };
+
+        AddLabeledControl(panel, "Recommendation", _recommendationFilter, 0, 0);
+        AddLabeledControl(panel, "Min Overall", _minOverallFilter, 1, 0);
+        panel.Controls.Add(_applyFilterButton, 2, 0);
+        panel.Controls.Add(_clearFilterButton, 3, 0);
+
+        group.Controls.Add(panel);
+        return group;
     }
 
     private static void AddLabeledControl(TableLayoutPanel panel, string label, Control control, int column, int row)
@@ -176,6 +261,8 @@ public sealed class MainForm : Form
         _resultsGrid.AllowUserToDeleteRows = false;
         _resultsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _resultsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _resultsGrid.SelectionChanged += (_, _) => ShowSelectedProductDetails();
+
         _resultsGrid.Columns.Add("overall", "Overall");
         _resultsGrid.Columns.Add("rec", "Rec");
         _resultsGrid.Columns.Add("stars", "Stars");
@@ -199,8 +286,10 @@ public sealed class MainForm : Form
             return;
         }
 
+        _allResults.Clear();
         _resultsGrid.Rows.Clear();
         _logTextBox.Clear();
+        _detailTextBox.Text = "Tarama başladı...";
         AppendLog($"Toplam anahtar kelime: {keywords.Count}");
         AppendLog($"Paralel görev sayısı: {_parallelNumeric.Value}");
         SetRunningState(true);
@@ -281,6 +370,27 @@ public sealed class MainForm : Form
             .ToList();
     }
 
+    private bool PassesCurrentFilter(ProductResult product)
+    {
+        var selectedRecommendation = _recommendationFilter.SelectedItem?.ToString() ?? "All";
+        if (selectedRecommendation != "All" && !product.Recommendation.Equals(selectedRecommendation, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return product.OverallScore >= _minOverallFilter.Value;
+    }
+
+    private void RefreshGrid()
+    {
+        _resultsGrid.Rows.Clear();
+        foreach (var product in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.OverallScore))
+        {
+            AddProductRowToGrid(product);
+        }
+        _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Toplam: {_allResults.Count}";
+    }
+
     private void SetRunningState(bool running)
     {
         _startButton.Enabled = !running;
@@ -301,6 +411,15 @@ public sealed class MainForm : Form
 
     private void AddProductRow(ProductResult product)
     {
+        _allResults.Add(product);
+        if (PassesCurrentFilter(product))
+        {
+            AddProductRowToGrid(product);
+        }
+    }
+
+    private void AddProductRowToGrid(ProductResult product)
+    {
         var index = _resultsGrid.Rows.Add(
             product.OverallScore,
             product.Recommendation,
@@ -316,6 +435,7 @@ public sealed class MainForm : Form
             product.ProductUrl);
 
         var row = _resultsGrid.Rows[index];
+        row.Tag = product;
         row.DefaultCellStyle.BackColor = product.OverallScore switch
         {
             >= 90 => Color.Honeydew,
@@ -323,5 +443,39 @@ public sealed class MainForm : Form
             >= 60 => Color.Moccasin,
             _ => Color.MistyRose
         };
+    }
+
+    private void ShowSelectedProductDetails()
+    {
+        if (_resultsGrid.SelectedRows.Count == 0 || _resultsGrid.SelectedRows[0].Tag is not ProductResult product)
+        {
+            return;
+        }
+
+        _detailTextBox.Text = BuildDetailText(product);
+    }
+
+    private static string BuildDetailText(ProductResult product)
+    {
+        var reasons = new List<string>();
+        reasons.Add(product.IsAmazonChoice ? "+ Amazon Choice" : "- Amazon Choice değil");
+        reasons.Add(product.HasLowStockWarning ? "- Stok az uyarısı var" : "+ Stok uyarısı yok");
+        reasons.Add(product.HasUsuallyKeepItemText ? "- Usually keep uyarısı var" : "+ Usually keep uyarısı yok");
+        reasons.Add(product.IsSponsored ? "- Sponsored sonuç" : "+ Organic sonuç");
+        reasons.Add(product.Price <= 60 ? "+ Fiyat iyi aralıkta" : "- Fiyat üst aralıkta");
+
+        return $"ASIN: {product.Asin}{Environment.NewLine}" +
+               $"Brand: {product.Brand}{Environment.NewLine}" +
+               $"Price: ${product.Price}{Environment.NewLine}" +
+               $"Keyword: {product.SearchKeyword}{Environment.NewLine}" +
+               $"URL: {product.ProductUrl}{Environment.NewLine}{Environment.NewLine}" +
+               $"Safety: {product.SafetyScore}/100{Environment.NewLine}" +
+               $"Sales: {product.SalesScore}/100{Environment.NewLine}" +
+               $"Profit: {product.ProfitScore}/100{Environment.NewLine}" +
+               $"Overall: {product.OverallScore}/100 {product.Stars}{Environment.NewLine}" +
+               $"Recommendation: {product.Recommendation}{Environment.NewLine}{Environment.NewLine}" +
+               "Neden bu puan?" + Environment.NewLine +
+               string.Join(Environment.NewLine, reasons) + Environment.NewLine + Environment.NewLine +
+               $"Title:{Environment.NewLine}{product.Title}";
     }
 }
