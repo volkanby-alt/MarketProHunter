@@ -18,13 +18,25 @@ public sealed class AmazonSearchService
         IProgress<ProductResult>? acceptedProgress = null,
         CancellationToken cancellationToken = default)
     {
-        return await RunManyAsync(new[] { keyword }, maxPages, settings, logProgress, acceptedProgress, cancellationToken);
+        return await RunManyAsync(new[] { keyword }, maxPages, settings, ProfitSettings.Default, logProgress, acceptedProgress, cancellationToken);
     }
 
     public async Task<SearchRunResult> RunManyAsync(
         IEnumerable<string> keywords,
         int maxPages,
         SearchSettings settings,
+        IProgress<string>? logProgress = null,
+        IProgress<ProductResult>? acceptedProgress = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await RunManyAsync(keywords, maxPages, settings, ProfitSettings.Default, logProgress, acceptedProgress, cancellationToken);
+    }
+
+    public async Task<SearchRunResult> RunManyAsync(
+        IEnumerable<string> keywords,
+        int maxPages,
+        SearchSettings settings,
+        ProfitSettings profitSettings,
         IProgress<string>? logProgress = null,
         IProgress<ProductResult>? acceptedProgress = null,
         CancellationToken cancellationToken = default)
@@ -49,7 +61,6 @@ public sealed class AmazonSearchService
         var productFilter = new ProductFilter(settings, veroFilter);
         var scoringEngine = new ScoringEngine();
         var profitEngine = new EbayProfitEngine();
-        var profitSettings = ProfitSettings.Default;
         var exporter = new CsvExporter();
         var accepted = new ConcurrentBag<ProductResult>();
         var acceptedAsins = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
@@ -58,14 +69,11 @@ public sealed class AmazonSearchService
         var maxParallel = Math.Clamp(settings.MaxParallelSearches, 1, 8);
 
         logProgress?.Report($"Paralel tarama başlıyor. Anahtar kelime: {keywordList.Count}, paralel görev: {maxParallel}");
+        logProgress?.Report($"Kâr ayarları: eBay %{profitSettings.EbayFinalValueFeePercent}, Promoted %{profitSettings.PromotedPercent}, hedef %{profitSettings.TargetProfitPercent}, min ${profitSettings.MinimumNetProfit}");
 
         await Parallel.ForEachAsync(
             keywordList,
-            new ParallelOptions
-            {
-                MaxDegreeOfParallelism = maxParallel,
-                CancellationToken = cancellationToken
-            },
+            new ParallelOptions { MaxDegreeOfParallelism = maxParallel, CancellationToken = cancellationToken },
             async (keyword, token) =>
             {
                 var client = new AmazonSearchClient(settings);
@@ -139,11 +147,7 @@ public sealed class AmazonSearchService
 
     private static string Shorten(string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Empty;
-        }
-
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
         return value.Length <= 80 ? value : value[..80] + "...";
     }
 }
