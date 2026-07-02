@@ -14,5 +14,11 @@ public sealed record ProductResult
     public string ProductUrl { get; init; } = "";
     public string SearchKeyword { get; init; } = "";
     public int Page { get; init; }
+    public int SafetyScore { get; init; }
+    public int SalesScore { get; init; }
+    public int ProfitScore { get; init; }
+    public int OverallScore { get; init; }
+    public string Recommendation { get; init; } = "";
+    public string Stars { get; init; } = "";
     public string Notes { get; init; } = "";
 }
