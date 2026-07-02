@@ -1,4 +1,5 @@
 using MarketProHunter.Amazon;
+using MarketProHunter.Categories;
 using MarketProHunter.Models;
 
 namespace MarketProHunter.UI;
@@ -6,6 +7,7 @@ namespace MarketProHunter.UI;
 public sealed class MainForm : Form
 {
     private readonly TextBox _keywordTextBox = new();
+    private readonly CheckedListBox _categoryListBox = new();
     private readonly NumericUpDown _pagesNumeric = new();
     private readonly NumericUpDown _minPriceNumeric = new();
     private readonly NumericUpDown _maxPriceNumeric = new();
@@ -19,6 +21,7 @@ public sealed class MainForm : Form
     private readonly TextBox _logTextBox = new();
     private readonly DataGridView _resultsGrid = new();
     private readonly Label _statusLabel = new();
+    private readonly IReadOnlyList<KeywordCategory> _categories = KeywordCategoryProvider.GetDefaultCategories();
 
     private CancellationTokenSource? _cancellationTokenSource;
 
@@ -26,7 +29,7 @@ public sealed class MainForm : Form
     {
         Text = "MarketProHunter - Amazon Search Engine";
         Width = 1180;
-        Height = 760;
+        Height = 820;
         StartPosition = FormStartPosition.CenterScreen;
         BuildLayout();
     }
@@ -37,11 +40,12 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             Padding = new Padding(10)
         };
 
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 115));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
@@ -58,7 +62,8 @@ public sealed class MainForm : Form
             settingsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12.5f));
         }
 
-        _keywordTextBox.Text = "home cleaner";
+        _keywordTextBox.Text = "";
+        _keywordTextBox.PlaceholderText = "İsteğe bağlı ekstra arama kelimesi";
         _zipTextBox.Text = "07073";
         _pagesNumeric.Minimum = 1;
         _pagesNumeric.Maximum = 100;
@@ -76,7 +81,7 @@ public sealed class MainForm : Form
         _usuallyKeepCheckBox.Text = "Usually keep ele";
         _usuallyKeepCheckBox.Checked = true;
 
-        AddLabeledControl(settingsPanel, "Arama", _keywordTextBox, 0, 0);
+        AddLabeledControl(settingsPanel, "Ekstra Arama", _keywordTextBox, 0, 0);
         AddLabeledControl(settingsPanel, "Sayfa", _pagesNumeric, 1, 0);
         AddLabeledControl(settingsPanel, "Min $", _minPriceNumeric, 2, 0);
         AddLabeledControl(settingsPanel, "Max $", _maxPriceNumeric, 3, 0);
@@ -102,6 +107,24 @@ public sealed class MainForm : Form
         _statusLabel.AutoSize = true;
         settingsPanel.Controls.Add(_statusLabel, 7, 0);
 
+        var categoryPanel = new GroupBox
+        {
+            Text = "Kategoriler - seçilenlerin anahtar kelimeleri otomatik taranır",
+            Dock = DockStyle.Fill
+        };
+
+        _categoryListBox.Dock = DockStyle.Fill;
+        _categoryListBox.CheckOnClick = true;
+        _categoryListBox.MultiColumn = true;
+        _categoryListBox.ColumnWidth = 230;
+
+        foreach (var category in _categories)
+        {
+            _categoryListBox.Items.Add(category.Name, category.Name is "Home & Kitchen" or "Automotive" or "Tools & Home Improvement" or "Beauty & Personal Care");
+        }
+
+        categoryPanel.Controls.Add(_categoryListBox);
+
         _progressBar.Dock = DockStyle.Fill;
         _progressBar.Style = ProgressBarStyle.Marquee;
         _progressBar.Visible = false;
@@ -114,9 +137,10 @@ public sealed class MainForm : Form
         _logTextBox.ReadOnly = true;
 
         root.Controls.Add(settingsPanel, 0, 0);
-        root.Controls.Add(_progressBar, 0, 1);
-        root.Controls.Add(_resultsGrid, 0, 2);
-        root.Controls.Add(_logTextBox, 0, 3);
+        root.Controls.Add(categoryPanel, 0, 1);
+        root.Controls.Add(_progressBar, 0, 2);
+        root.Controls.Add(_resultsGrid, 0, 3);
+        root.Controls.Add(_logTextBox, 0, 4);
 
         Controls.Add(root);
     }
@@ -151,19 +175,22 @@ public sealed class MainForm : Form
         _resultsGrid.Columns.Add("title", "Title");
         _resultsGrid.Columns.Add("brand", "Brand");
         _resultsGrid.Columns.Add("price", "Price");
+        _resultsGrid.Columns.Add("keyword", "Keyword");
         _resultsGrid.Columns.Add("url", "URL");
     }
 
     private async Task StartSearchAsync()
     {
-        if (string.IsNullOrWhiteSpace(_keywordTextBox.Text))
+        var keywords = BuildKeywordList();
+        if (keywords.Count == 0)
         {
-            MessageBox.Show("Arama kelimesi yazın.", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("En az bir kategori seçin veya ekstra arama kelimesi yazın.", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         _resultsGrid.Rows.Clear();
         _logTextBox.Clear();
+        AppendLog($"Toplam anahtar kelime: {keywords.Count}");
         SetRunningState(true);
         _cancellationTokenSource = new CancellationTokenSource();
 
@@ -183,8 +210,8 @@ public sealed class MainForm : Form
 
         try
         {
-            var result = await service.RunAsync(
-                _keywordTextBox.Text.Trim(),
+            var result = await service.RunManyAsync(
+                keywords,
                 (int)_pagesNumeric.Value,
                 settings,
                 logProgress,
@@ -214,11 +241,39 @@ public sealed class MainForm : Form
         }
     }
 
+    private IReadOnlyList<string> BuildKeywordList()
+    {
+        var keywords = new List<string>();
+
+        foreach (var checkedItem in _categoryListBox.CheckedItems)
+        {
+            var categoryName = checkedItem.ToString();
+            var category = _categories.FirstOrDefault(x => x.Name.Equals(categoryName, StringComparison.OrdinalIgnoreCase));
+            if (category is not null)
+            {
+                keywords.AddRange(category.Keywords);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(_keywordTextBox.Text))
+        {
+            keywords.AddRange(
+                _keywordTextBox.Text
+                    .Split(new[] { ',', ';', Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+
+        return keywords
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     private void SetRunningState(bool running)
     {
         _startButton.Enabled = !running;
         _stopButton.Enabled = running;
         _progressBar.Visible = running;
+        _categoryListBox.Enabled = !running;
         if (running)
         {
             _statusLabel.Text = "Çalışıyor...";
@@ -232,6 +287,6 @@ public sealed class MainForm : Form
 
     private void AddProductRow(ProductResult product)
     {
-        _resultsGrid.Rows.Add(product.Asin, product.Title, product.Brand, $"${product.Price}", product.ProductUrl);
+        _resultsGrid.Rows.Add(product.Asin, product.Title, product.Brand, $"${product.Price}", product.SearchKeyword, product.ProductUrl);
     }
 }
