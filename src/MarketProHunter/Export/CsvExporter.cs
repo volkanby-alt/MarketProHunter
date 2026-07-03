@@ -15,7 +15,7 @@ public sealed class CsvExporter
         }
 
         var builder = new StringBuilder();
-        builder.AppendLine("UploadScore,UploadDecision,CompetitionScore,ConfidenceScore,OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,Rating,ReviewCount,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,LowStock,UsuallyKeep,ProductUrl,Keyword,Page,Notes");
+        builder.AppendLine("UploadScore,UploadDecision,CompetitionScore,ConfidenceScore,VisualRiskLevel,VisualRiskNotes,ImageCount,ImageUrl1,ImageUrl2,ImageUrl3,ImageUrl4,ImageUrl5,ImageUrl6,OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,Rating,ReviewCount,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,LowStock,UsuallyKeep,ProductUrl,Keyword,Page,Notes");
 
         foreach (var p in products)
         {
@@ -25,6 +25,15 @@ public sealed class CsvExporter
                 Escape(p.UploadDecision),
                 p.CompetitionScore.ToString(CultureInfo.InvariantCulture),
                 p.ConfidenceScore.ToString(CultureInfo.InvariantCulture),
+                Escape(p.VisualRiskLevel),
+                Escape(p.VisualRiskNotes),
+                p.ImageCount.ToString(CultureInfo.InvariantCulture),
+                Escape(p.ImageUrl1),
+                Escape(p.ImageUrl2),
+                Escape(p.ImageUrl3),
+                Escape(p.ImageUrl4),
+                Escape(p.ImageUrl5),
+                Escape(p.ImageUrl6),
                 p.OverallScore.ToString(CultureInfo.InvariantCulture),
                 p.SafetyScore.ToString(CultureInfo.InvariantCulture),
                 p.SalesScore.ToString(CultureInfo.InvariantCulture),
