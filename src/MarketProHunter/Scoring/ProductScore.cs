@@ -5,6 +5,7 @@ public sealed record ProductScore(
     int SalesScore,
     int ProfitScore,
     int OverallScore,
+    int ConfidenceScore,
     string Recommendation)
 {
     public string Stars => OverallScore switch
