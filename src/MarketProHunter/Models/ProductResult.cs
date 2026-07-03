@@ -14,6 +14,9 @@ public sealed record ProductResult
     public decimal Rating { get; init; }
     public int ReviewCount { get; init; }
     public int ConfidenceScore { get; init; }
+    public int CompetitionScore { get; init; }
+    public int UploadScore { get; init; }
+    public string UploadDecision { get; init; } = "";
     public string ProductUrl { get; init; } = "";
     public string SearchKeyword { get; init; } = "";
     public int Page { get; init; }
