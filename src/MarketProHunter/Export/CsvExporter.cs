@@ -15,12 +15,15 @@ public sealed class CsvExporter
         }
 
         var builder = new StringBuilder();
-        builder.AppendLine("ConfidenceScore,OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,Rating,ReviewCount,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,LowStock,UsuallyKeep,ProductUrl,Keyword,Page,Notes");
+        builder.AppendLine("UploadScore,UploadDecision,CompetitionScore,ConfidenceScore,OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,Rating,ReviewCount,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,LowStock,UsuallyKeep,ProductUrl,Keyword,Page,Notes");
 
         foreach (var p in products)
         {
             builder.AppendLine(string.Join(',', new[]
             {
+                p.UploadScore.ToString(CultureInfo.InvariantCulture),
+                Escape(p.UploadDecision),
+                p.CompetitionScore.ToString(CultureInfo.InvariantCulture),
                 p.ConfidenceScore.ToString(CultureInfo.InvariantCulture),
                 p.OverallScore.ToString(CultureInfo.InvariantCulture),
                 p.SafetyScore.ToString(CultureInfo.InvariantCulture),
