@@ -106,6 +106,9 @@ public sealed class AmazonSearchService
                                 ProfitScore = score.ProfitScore,
                                 OverallScore = score.OverallScore,
                                 ConfidenceScore = score.ConfidenceScore,
+                                CompetitionScore = score.CompetitionScore,
+                                UploadScore = score.UploadScore,
+                                UploadDecision = score.UploadDecision,
                                 Recommendation = score.Recommendation,
                                 Stars = score.Stars,
                                 RecommendedSalePrice = profit.RecommendedSalePrice,
@@ -119,7 +122,7 @@ public sealed class AmazonSearchService
 
                             accepted.Add(acceptedProduct);
                             acceptedProgress?.Report(acceptedProduct);
-                            logProgress?.Report($"OK  {product.Asin} | Score {score.OverallScore} | Confidence {score.ConfidenceScore}% | eBay ${profit.RecommendedSalePrice} | Net ${profit.NetProfit} | {Shorten(product.Title)}");
+                            logProgress?.Report($"OK  {product.Asin} | Upload {score.UploadScore} | {score.UploadDecision} | Conf {score.ConfidenceScore}% | Comp {score.CompetitionScore} | Net ${profit.NetProfit} | {Shorten(product.Title)}");
                         }
                         else
                         {
@@ -134,11 +137,11 @@ public sealed class AmazonSearchService
             });
 
         var orderedAccepted = accepted
-            .OrderByDescending(p => p.ConfidenceScore)
+            .OrderByDescending(p => p.UploadScore)
+            .ThenByDescending(p => p.ConfidenceScore)
             .ThenByDescending(p => p.OverallScore)
             .ThenByDescending(p => p.NetProfit)
-            .ThenByDescending(p => p.SafetyScore)
-            .ThenBy(p => p.Price)
+            .ThenBy(p => p.CompetitionScore)
             .ToList();
 
         var outputPath = Path.Combine(AppContext.BaseDirectory, "output", $"amazon_results_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
