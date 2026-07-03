@@ -17,6 +17,9 @@ public sealed record ProductResult
     public int CompetitionScore { get; init; }
     public int UploadScore { get; init; }
     public string UploadDecision { get; init; } = "";
+    public string RiskLevel { get; init; } = "";
+    public string SweetSpot { get; init; } = "";
+    public string OpportunitySummary { get; init; } = "";
     public string ProductUrl { get; init; } = "";
     public string SearchKeyword { get; init; } = "";
     public int Page { get; init; }
