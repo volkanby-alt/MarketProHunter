@@ -49,6 +49,7 @@ public sealed class AmazonSearchService
         var productFilter = new ProductFilter(settings, veroFilter);
         var scoringEngine = new ScoringEngine();
         var opportunityAnalyzer = new OpportunityAnalyzer();
+        var smartQueueEngine = new SmartQueueEngine();
         var profitEngine = new EbayProfitEngine();
         var exporter = new CsvExporter();
         var accepted = new ConcurrentBag<ProductResult>();
@@ -58,6 +59,7 @@ public sealed class AmazonSearchService
         var maxParallel = Math.Clamp(settings.MaxParallelSearches, 1, 8);
 
         logProgress?.Report($"Paralel tarama başlıyor. Anahtar kelime: {keywordList.Count}, paralel görev: {maxParallel}");
+        logProgress?.Report($"Smart Queue hedefi: {SmartQueueEngine.DefaultQueueSize} ürün");
         logProgress?.Report($"Kâr ayarları: eBay %{profitSettings.EbayFinalValueFeePercent}, Promoted %{profitSettings.PromotedPercent}, hedef %{profitSettings.TargetProfitPercent}, min ${profitSettings.MinimumNetProfit}");
 
         await Parallel.ForEachAsync(keywordList, new ParallelOptions { MaxDegreeOfParallelism = maxParallel, CancellationToken = cancellationToken }, async (keyword, token) =>
@@ -130,10 +132,26 @@ public sealed class AmazonSearchService
         });
 
         var orderedAccepted = accepted.OrderByDescending(p => p.UploadScore).ThenByDescending(p => p.ConfidenceScore).ThenByDescending(p => p.OverallScore).ThenByDescending(p => p.NetProfit).ThenBy(p => p.CompetitionScore).ToList();
-        var outputPath = Path.Combine(AppContext.BaseDirectory, "output", $"amazon_results_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+        var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        var outputPath = Path.Combine(AppContext.BaseDirectory, "output", $"amazon_results_{timestamp}.csv");
+        var smartQueuePath = Path.Combine(AppContext.BaseDirectory, "output", $"smart_queue_top50_{timestamp}.csv");
         await exporter.WriteAsync(outputPath, orderedAccepted, cancellationToken);
 
-        return new SearchRunResult(scannedCount, orderedAccepted.Count, skippedCount, outputPath);
+        var smartQueue = smartQueueEngine.Build(orderedAccepted, SmartQueueEngine.DefaultQueueSize);
+        await exporter.WriteSmartQueueAsync(smartQueuePath, smartQueue, cancellationToken);
+        logProgress?.Report($"Smart Queue hazır: {smartQueue.SelectedCount}/{smartQueue.RequestedCount} ürün | Beklenen net kâr: ${smartQueue.ExpectedNetProfit} | Ortalama Upload: {smartQueue.AverageUploadScore} | Ortalama Confidence: {smartQueue.AverageConfidenceScore}%");
+        logProgress?.Report($"Smart Queue CSV: {smartQueuePath}");
+
+        return new SearchRunResult(
+            scannedCount,
+            orderedAccepted.Count,
+            skippedCount,
+            outputPath,
+            smartQueuePath,
+            smartQueue.SelectedCount,
+            smartQueue.ExpectedNetProfit,
+            smartQueue.AverageUploadScore,
+            smartQueue.AverageConfidenceScore);
     }
 
     private static string Shorten(string value)
