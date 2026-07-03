@@ -11,6 +11,9 @@ public sealed record ProductResult
     public bool IsSponsored { get; init; }
     public bool HasLowStockWarning { get; init; }
     public bool HasUsuallyKeepItemText { get; init; }
+    public decimal Rating { get; init; }
+    public int ReviewCount { get; init; }
+    public int ConfidenceScore { get; init; }
     public string ProductUrl { get; init; } = "";
     public string SearchKeyword { get; init; } = "";
     public int Page { get; init; }
