@@ -21,29 +21,19 @@ public sealed partial class AmazonSearchParser
         {
             var block = card.Value;
             var asin = ExtractAsin(block);
-            if (string.IsNullOrWhiteSpace(asin))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(asin)) continue;
 
             var title = Clean(ExtractTitle(block));
-            if (string.IsNullOrWhiteSpace(title) || IsNonProductCard(title))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(title) || IsNonProductCard(title)) continue;
 
             var price = ExtractPrice(block);
-            if (price <= 0)
-            {
-                continue;
-            }
+            if (price <= 0) continue;
 
             var productUrl = ExtractProductUrl(block, asin);
             var decodedBlock = WebUtility.HtmlDecode(block);
-            var isChoice = ContainsAny(decodedBlock,
-                "Amazon's Choice",
-                "Amazon’s Choice",
-                "Amazon Choice");
+            var imageUrls = ExtractImageUrls(decodedBlock);
+            var visualRisk = AnalyzeVisualCompleteness(imageUrls.Count);
+            var isChoice = ContainsAny(decodedBlock, "Amazon's Choice", "Amazon’s Choice", "Amazon Choice");
 
             results.Add(new ProductResult
             {
@@ -57,26 +47,28 @@ public sealed partial class AmazonSearchParser
                 HasUsuallyKeepItemText = HasUsuallyKeepText(decodedBlock),
                 Rating = ExtractRating(decodedBlock),
                 ReviewCount = ExtractReviewCount(decodedBlock),
+                ImageUrl1 = GetImage(imageUrls, 0),
+                ImageUrl2 = GetImage(imageUrls, 1),
+                ImageUrl3 = GetImage(imageUrls, 2),
+                ImageUrl4 = GetImage(imageUrls, 3),
+                ImageUrl5 = GetImage(imageUrls, 4),
+                ImageUrl6 = GetImage(imageUrls, 5),
+                ImageCount = imageUrls.Count,
+                VisualRiskLevel = visualRisk.Level,
+                VisualRiskNotes = visualRisk.Notes,
                 ProductUrl = productUrl,
                 SearchKeyword = keyword,
                 Page = page
             });
         }
 
-        return results
-            .GroupBy(p => p.Asin, StringComparer.OrdinalIgnoreCase)
-            .Select(g => g.First())
-            .ToList();
+        return results.GroupBy(p => p.Asin, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
     }
 
     private static string ExtractAsin(string block)
     {
         var match = Regex.Match(block, "data-asin=\"(?<asin>[A-Z0-9]{10})\"", RegexOptions.IgnoreCase);
-        if (match.Success)
-        {
-            return match.Groups["asin"].Value;
-        }
-
+        if (match.Success) return match.Groups["asin"].Value;
         match = Regex.Match(block, "/(?:dp|gp/product)/(?<asin>[A-Z0-9]{10})", RegexOptions.IgnoreCase);
         return match.Success ? match.Groups["asin"].Value : string.Empty;
     }
@@ -84,16 +76,10 @@ public sealed partial class AmazonSearchParser
     private static string ExtractTitle(string block)
     {
         var titleMatch = Regex.Match(block, "<h2[^>]*>[\\s\\S]*?<span[^>]*>(?<title>[\\s\\S]*?)</span>[\\s\\S]*?</h2>", RegexOptions.IgnoreCase);
-        if (titleMatch.Success)
-        {
-            return WebUtility.HtmlDecode(StripTags(titleMatch.Groups["title"].Value));
-        }
+        if (titleMatch.Success) return WebUtility.HtmlDecode(StripTags(titleMatch.Groups["title"].Value));
 
         var aria = Regex.Match(block, "aria-label=\"(?<title>[^\"]{10,})\"", RegexOptions.IgnoreCase);
-        if (aria.Success)
-        {
-            return WebUtility.HtmlDecode(aria.Groups["title"].Value);
-        }
+        if (aria.Success) return WebUtility.HtmlDecode(aria.Groups["title"].Value);
 
         var span = Regex.Match(block, "<span[^>]*class=\"[^\"]*(?:a-size-base-plus|a-size-medium)[^\"]*\"[^>]*>(?<title>.*?)</span>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         return span.Success ? WebUtility.HtmlDecode(StripTags(span.Groups["title"].Value)) : string.Empty;
@@ -105,10 +91,7 @@ public sealed partial class AmazonSearchParser
         foreach (Match match in offscreenMatches)
         {
             var price = ParsePrice(match.Groups["price"].Value);
-            if (price > 0)
-            {
-                return price;
-            }
+            if (price > 0) return price;
         }
 
         var whole = Regex.Match(block, "<span[^>]*class=\"[^\"]*a-price-whole[^\"]*\"[^>]*>(?<whole>[0-9,]+)</span>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -116,11 +99,7 @@ public sealed partial class AmazonSearchParser
         {
             var fraction = Regex.Match(block, "<span[^>]*class=\"[^\"]*a-price-fraction[^\"]*\"[^>]*>(?<fraction>[0-9]{2})</span>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             var raw = StripTags(whole.Groups["whole"].Value).Replace(",", "").Trim('.');
-            if (fraction.Success)
-            {
-                raw += "." + StripTags(fraction.Groups["fraction"].Value);
-            }
-
+            if (fraction.Success) raw += "." + StripTags(fraction.Groups["fraction"].Value);
             return ParsePrice(raw);
         }
 
@@ -139,10 +118,7 @@ public sealed partial class AmazonSearchParser
         foreach (var pattern in patterns)
         {
             var match = Regex.Match(block, pattern, RegexOptions.IgnoreCase);
-            if (match.Success && decimal.TryParse(match.Groups["rating"].Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var rating))
-            {
-                return rating;
-            }
+            if (match.Success && decimal.TryParse(match.Groups["rating"].Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var rating)) return rating;
         }
 
         return 0m;
@@ -162,15 +138,66 @@ public sealed partial class AmazonSearchParser
             foreach (Match match in Regex.Matches(block, pattern, RegexOptions.IgnoreCase))
             {
                 var raw = match.Groups["reviews"].Value.Replace(",", "");
-                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var reviews) && reviews > 0)
-                {
-                    return reviews;
-                }
+                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var reviews) && reviews > 0) return reviews;
             }
         }
 
         return 0;
     }
+
+    private static IReadOnlyList<string> ExtractImageUrls(string block)
+    {
+        var urls = new List<string>();
+        var patterns = new[]
+        {
+            "src=\"(?<url>https://[^\"]+?\\.(?:jpg|jpeg|png|webp)[^\"]*)\"",
+            "data-src=\"(?<url>https://[^\"]+?\\.(?:jpg|jpeg|png|webp)[^\"]*)\"",
+            "srcset=\"(?<set>https://[^\"]+)\""
+        };
+
+        foreach (var pattern in patterns)
+        {
+            foreach (Match match in Regex.Matches(block, pattern, RegexOptions.IgnoreCase))
+            {
+                if (match.Groups["url"].Success)
+                {
+                    AddImageUrl(urls, match.Groups["url"].Value);
+                }
+                else if (match.Groups["set"].Success)
+                {
+                    foreach (var part in match.Groups["set"].Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        AddImageUrl(urls, part.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty);
+                    }
+                }
+
+                if (urls.Count >= 6) return urls;
+            }
+        }
+
+        return urls;
+    }
+
+    private static void AddImageUrl(List<string> urls, string rawUrl)
+    {
+        var url = WebUtility.HtmlDecode(rawUrl).Trim();
+        if (string.IsNullOrWhiteSpace(url)) return;
+        if (!url.Contains("media-amazon", StringComparison.OrdinalIgnoreCase) && !url.Contains("ssl-images-amazon", StringComparison.OrdinalIgnoreCase)) return;
+        url = Regex.Replace(url, "\._[^.]+_\.", ".");
+        if (!urls.Contains(url, StringComparer.OrdinalIgnoreCase)) urls.Add(url);
+    }
+
+    private static (string Level, string Notes) AnalyzeVisualCompleteness(int imageCount)
+    {
+        return imageCount switch
+        {
+            >= 4 and <= 6 => ("LOW", $"Image set complete: {imageCount}/6"),
+            > 0 and < 4 => ("MEDIUM", $"Visual Data Incomplete: only {imageCount}/4 minimum images found"),
+            _ => ("HIGH", "No product image found")
+        };
+    }
+
+    private static string GetImage(IReadOnlyList<string> urls, int index) => index < urls.Count ? urls[index] : string.Empty;
 
     private static decimal ParsePrice(string raw)
     {
@@ -181,65 +208,35 @@ public sealed partial class AmazonSearchParser
     private static string ExtractProductUrl(string block, string asin)
     {
         var match = Regex.Match(block, "href=\"(?<url>/(?:[^\"]*?/)?(?:dp|gp/product)/[A-Z0-9]{10}[^\"]*)\"", RegexOptions.IgnoreCase);
-        if (!match.Success)
-        {
-            return $"https://www.amazon.com/dp/{asin}";
-        }
+        if (!match.Success) return $"https://www.amazon.com/dp/{asin}";
 
         var url = WebUtility.HtmlDecode(match.Groups["url"].Value);
         var clean = url.Split('?')[0];
-        if (!clean.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-        {
-            clean = "https://www.amazon.com" + clean;
-        }
-
+        if (!clean.StartsWith("http", StringComparison.OrdinalIgnoreCase)) clean = "https://www.amazon.com" + clean;
         return clean;
     }
 
     private static bool HasLowStockText(string block)
     {
-        return ContainsAny(block,
-            "Only 1 left in stock",
-            "Only 2 left in stock",
-            "Only 3 left in stock",
-            "Only 4 left in stock",
-            "Only 5 left in stock",
-            "left in stock - order soon",
-            "in stock - order soon");
+        return ContainsAny(block, "Only 1 left in stock", "Only 2 left in stock", "Only 3 left in stock", "Only 4 left in stock", "Only 5 left in stock", "left in stock - order soon", "in stock - order soon");
     }
 
     private static bool HasUsuallyKeepText(string block)
     {
-        return ContainsAny(block,
-            "Customers usually keep this item",
-            "Customer usually keeps this item",
-            "usually keep this item",
-            "usually keeps this item");
+        return ContainsAny(block, "Customers usually keep this item", "Customer usually keeps this item", "usually keep this item", "usually keeps this item");
     }
 
     private static bool IsNonProductCard(string title)
     {
-        return ContainsAny(title,
-            "Shop by category",
-            "Related searches",
-            "Explore more",
-            "Need help");
+        return ContainsAny(title, "Shop by category", "Related searches", "Explore more", "Need help");
     }
 
     private static string GuessBrand(string title)
     {
-        if (string.IsNullOrWhiteSpace(title))
-        {
-            return string.Empty;
-        }
-
+        if (string.IsNullOrWhiteSpace(title)) return string.Empty;
         var cleaned = title.Trim();
         var byMatch = Regex.Match(cleaned, "\\bby\\s+(?<brand>[A-Za-z0-9][A-Za-z0-9&' .-]{1,30})", RegexOptions.IgnoreCase);
-        if (byMatch.Success)
-        {
-            return NormalizeBrand(byMatch.Groups["brand"].Value);
-        }
-
+        if (byMatch.Success) return NormalizeBrand(byMatch.Groups["brand"].Value);
         var firstPart = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
         return NormalizeBrand(firstPart);
     }
