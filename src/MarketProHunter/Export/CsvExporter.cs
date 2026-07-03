@@ -15,18 +15,21 @@ public sealed class CsvExporter
         }
 
         var builder = new StringBuilder();
-        builder.AppendLine("OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,ProductUrl,Keyword,Page,Notes");
+        builder.AppendLine("ConfidenceScore,OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,Rating,ReviewCount,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,LowStock,UsuallyKeep,ProductUrl,Keyword,Page,Notes");
 
         foreach (var p in products)
         {
             builder.AppendLine(string.Join(',', new[]
             {
+                p.ConfidenceScore.ToString(CultureInfo.InvariantCulture),
                 p.OverallScore.ToString(CultureInfo.InvariantCulture),
                 p.SafetyScore.ToString(CultureInfo.InvariantCulture),
                 p.SalesScore.ToString(CultureInfo.InvariantCulture),
                 p.ProfitScore.ToString(CultureInfo.InvariantCulture),
                 Escape(p.Recommendation),
                 Escape(p.Stars),
+                p.Rating.ToString(CultureInfo.InvariantCulture),
+                p.ReviewCount.ToString(CultureInfo.InvariantCulture),
                 p.Price.ToString(CultureInfo.InvariantCulture),
                 p.RecommendedSalePrice.ToString(CultureInfo.InvariantCulture),
                 p.EbayFee.ToString(CultureInfo.InvariantCulture),
@@ -41,6 +44,8 @@ public sealed class CsvExporter
                 Escape(p.Currency),
                 p.IsAmazonChoice.ToString(),
                 p.IsSponsored.ToString(),
+                p.HasLowStockWarning.ToString(),
+                p.HasUsuallyKeepItemText.ToString(),
                 Escape(p.ProductUrl),
                 Escape(p.SearchKeyword),
                 p.Page.ToString(CultureInfo.InvariantCulture),
