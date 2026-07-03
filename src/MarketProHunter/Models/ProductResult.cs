@@ -13,7 +13,13 @@ public sealed record ProductResult
     public bool HasUsuallyKeepItemText { get; init; }
     public decimal Rating { get; init; }
     public int ReviewCount { get; init; }
-    public string ImageUrl { get; init; } = "";
+    public string ImageUrl1 { get; init; } = "";
+    public string ImageUrl2 { get; init; } = "";
+    public string ImageUrl3 { get; init; } = "";
+    public string ImageUrl4 { get; init; } = "";
+    public string ImageUrl5 { get; init; } = "";
+    public string ImageUrl6 { get; init; } = "";
+    public int ImageCount { get; init; }
     public string VisualRiskLevel { get; init; } = "";
     public string VisualRiskNotes { get; init; } = "";
     public int ConfidenceScore { get; init; }
