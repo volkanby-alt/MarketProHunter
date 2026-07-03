@@ -1,3 +1,4 @@
+using System.Net;
 using MarketProHunter.Models;
 
 namespace MarketProHunter.Amazon;
@@ -12,7 +13,7 @@ public sealed class AmazonSearchClient : IDisposable
         _settings = settings;
         _httpClient = new HttpClient(new HttpClientHandler
         {
-            AutomaticDecompression = System.Net.DecompressionMethods.All
+            AutomaticDecompression = DecompressionMethods.All
         });
 
         _httpClient.Timeout = TimeSpan.FromSeconds(35);
