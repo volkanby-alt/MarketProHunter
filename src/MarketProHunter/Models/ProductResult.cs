@@ -13,6 +13,9 @@ public sealed record ProductResult
     public bool HasUsuallyKeepItemText { get; init; }
     public decimal Rating { get; init; }
     public int ReviewCount { get; init; }
+    public string ImageUrl { get; init; } = "";
+    public string VisualRiskLevel { get; init; } = "";
+    public string VisualRiskNotes { get; init; } = "";
     public int ConfidenceScore { get; init; }
     public int CompetitionScore { get; init; }
     public int UploadScore { get; init; }
