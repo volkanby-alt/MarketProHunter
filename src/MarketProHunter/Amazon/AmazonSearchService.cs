@@ -41,25 +41,14 @@ public sealed class AmazonSearchService
         IProgress<ProductResult>? acceptedProgress = null,
         CancellationToken cancellationToken = default)
     {
-        var keywordList = keywords
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Select(x => x.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (keywordList.Count == 0)
-        {
-            throw new ArgumentException("En az bir arama kelimesi gerekli.", nameof(keywords));
-        }
-
-        if (maxPages < 1)
-        {
-            maxPages = 1;
-        }
+        var keywordList = keywords.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (keywordList.Count == 0) throw new ArgumentException("En az bir arama kelimesi gerekli.", nameof(keywords));
+        if (maxPages < 1) maxPages = 1;
 
         var veroFilter = new VeroBrandFilter("config/vero-brands.txt");
         var productFilter = new ProductFilter(settings, veroFilter);
         var scoringEngine = new ScoringEngine();
+        var opportunityAnalyzer = new OpportunityAnalyzer();
         var profitEngine = new EbayProfitEngine();
         var exporter = new CsvExporter();
         var accepted = new ConcurrentBag<ProductResult>();
@@ -71,79 +60,76 @@ public sealed class AmazonSearchService
         logProgress?.Report($"Paralel tarama başlıyor. Anahtar kelime: {keywordList.Count}, paralel görev: {maxParallel}");
         logProgress?.Report($"Kâr ayarları: eBay %{profitSettings.EbayFinalValueFeePercent}, Promoted %{profitSettings.PromotedPercent}, hedef %{profitSettings.TargetProfitPercent}, min ${profitSettings.MinimumNetProfit}");
 
-        await Parallel.ForEachAsync(
-            keywordList,
-            new ParallelOptions { MaxDegreeOfParallelism = maxParallel, CancellationToken = cancellationToken },
-            async (keyword, token) =>
-            {
-                using var client = new AmazonSearchClient(settings);
-                var parser = new AmazonSearchParser();
-                logProgress?.Report($"Arama başlıyor: {keyword}");
+        await Parallel.ForEachAsync(keywordList, new ParallelOptions { MaxDegreeOfParallelism = maxParallel, CancellationToken = cancellationToken }, async (keyword, token) =>
+        {
+            using var client = new AmazonSearchClient(settings);
+            var parser = new AmazonSearchParser();
+            logProgress?.Report($"Arama başlıyor: {keyword}");
 
-                for (var page = 1; page <= maxPages; page++)
+            for (var page = 1; page <= maxPages; page++)
+            {
+                token.ThrowIfCancellationRequested();
+                logProgress?.Report($"{keyword} | Sayfa: {page}/{maxPages}");
+
+                var html = await client.FetchSearchPageAsync(keyword, page, token);
+                var products = parser.Parse(html, keyword, page);
+                logProgress?.Report($"{keyword} | Sayfa {page}: {products.Count} ürün kartı bulundu.");
+
+                foreach (var product in products)
                 {
                     token.ThrowIfCancellationRequested();
-                    logProgress?.Report($"{keyword} | Sayfa: {page}/{maxPages}");
+                    Interlocked.Increment(ref scannedCount);
+                    var decision = productFilter.Evaluate(product);
 
-                    var html = await client.FetchSearchPageAsync(keyword, page, token);
-                    var products = parser.Parse(html, keyword, page);
-                    logProgress?.Report($"{keyword} | Sayfa {page}: {products.Count} ürün kartı bulundu.");
-
-                    foreach (var product in products)
+                    if (decision.Accepted && acceptedAsins.TryAdd(product.Asin, 0))
                     {
-                        token.ThrowIfCancellationRequested();
-                        Interlocked.Increment(ref scannedCount);
-                        var decision = productFilter.Evaluate(product);
-
-                        if (decision.Accepted && acceptedAsins.TryAdd(product.Asin, 0))
+                        var score = scoringEngine.Score(product);
+                        var profit = profitEngine.Calculate(product, profitSettings);
+                        var enrichedProduct = product with
                         {
-                            var score = scoringEngine.Score(product);
-                            var profit = profitEngine.Calculate(product, profitSettings);
-                            var acceptedProduct = product with
-                            {
-                                SafetyScore = score.SafetyScore,
-                                SalesScore = score.SalesScore,
-                                ProfitScore = score.ProfitScore,
-                                OverallScore = score.OverallScore,
-                                ConfidenceScore = score.ConfidenceScore,
-                                CompetitionScore = score.CompetitionScore,
-                                UploadScore = score.UploadScore,
-                                UploadDecision = score.UploadDecision,
-                                Recommendation = score.Recommendation,
-                                Stars = score.Stars,
-                                RecommendedSalePrice = profit.RecommendedSalePrice,
-                                EbayFee = profit.EbayFee,
-                                PromotedFee = profit.PromotedFee,
-                                NetProfit = profit.NetProfit,
-                                NetMarginPercent = profit.NetMarginPercent,
-                                ProfitDecision = profit.ProfitDecision,
-                                Notes = decision.Reason
-                            };
-
-                            accepted.Add(acceptedProduct);
-                            acceptedProgress?.Report(acceptedProduct);
-                            logProgress?.Report($"OK  {product.Asin} | Upload {score.UploadScore} | {score.UploadDecision} | Conf {score.ConfidenceScore}% | Comp {score.CompetitionScore} | Net ${profit.NetProfit} | {Shorten(product.Title)}");
-                        }
-                        else
+                            SafetyScore = score.SafetyScore,
+                            SalesScore = score.SalesScore,
+                            ProfitScore = score.ProfitScore,
+                            OverallScore = score.OverallScore,
+                            ConfidenceScore = score.ConfidenceScore,
+                            CompetitionScore = score.CompetitionScore,
+                            UploadScore = score.UploadScore,
+                            UploadDecision = score.UploadDecision,
+                            Recommendation = score.Recommendation,
+                            Stars = score.Stars,
+                            RecommendedSalePrice = profit.RecommendedSalePrice,
+                            EbayFee = profit.EbayFee,
+                            PromotedFee = profit.PromotedFee,
+                            NetProfit = profit.NetProfit,
+                            NetMarginPercent = profit.NetMarginPercent,
+                            ProfitDecision = profit.ProfitDecision,
+                            Notes = decision.Reason
+                        };
+                        var opportunity = opportunityAnalyzer.Analyze(enrichedProduct);
+                        var acceptedProduct = enrichedProduct with
                         {
-                            Interlocked.Increment(ref skippedCount);
-                            var reason = decision.Accepted ? "Tekrar eden ASIN" : decision.Reason;
-                            logProgress?.Report($"SKIP {product.Asin} | {reason}");
-                        }
+                            RiskLevel = opportunity.RiskLevel,
+                            SweetSpot = opportunity.SweetSpot,
+                            OpportunitySummary = opportunity.Summary
+                        };
+
+                        accepted.Add(acceptedProduct);
+                        acceptedProgress?.Report(acceptedProduct);
+                        logProgress?.Report($"OK  {product.Asin} | {score.UploadDecision} | Upload {score.UploadScore} | Risk {opportunity.RiskLevel} | {opportunity.SweetSpot} | Net ${profit.NetProfit}");
                     }
-
-                    await Task.Delay(settings.DelayBetweenPagesMs, token);
+                    else
+                    {
+                        Interlocked.Increment(ref skippedCount);
+                        var reason = decision.Accepted ? "Tekrar eden ASIN" : decision.Reason;
+                        logProgress?.Report($"SKIP {product.Asin} | {reason}");
+                    }
                 }
-            });
 
-        var orderedAccepted = accepted
-            .OrderByDescending(p => p.UploadScore)
-            .ThenByDescending(p => p.ConfidenceScore)
-            .ThenByDescending(p => p.OverallScore)
-            .ThenByDescending(p => p.NetProfit)
-            .ThenBy(p => p.CompetitionScore)
-            .ToList();
+                await Task.Delay(settings.DelayBetweenPagesMs, token);
+            }
+        });
 
+        var orderedAccepted = accepted.OrderByDescending(p => p.UploadScore).ThenByDescending(p => p.ConfidenceScore).ThenByDescending(p => p.OverallScore).ThenByDescending(p => p.NetProfit).ThenBy(p => p.CompetitionScore).ToList();
         var outputPath = Path.Combine(AppContext.BaseDirectory, "output", $"amazon_results_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
         await exporter.WriteAsync(outputPath, orderedAccepted, cancellationToken);
 
