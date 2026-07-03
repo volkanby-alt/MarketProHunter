@@ -12,9 +12,9 @@ public sealed class ScoringEngine
         var overall = Clamp((int)Math.Round((safety * 0.38) + (sales * 0.35) + (profit * 0.27)));
         var confidence = CalculateConfidenceScore(product, safety, sales, profit, overall);
         var competition = CalculateCompetitionScore(product);
-        var uploadScore = CalculateUploadScore(safety, sales, profit, confidence, competition);
-        var uploadDecision = UploadDecisionFor(uploadScore, safety, confidence, competition);
-        var recommendation = RecommendationFor(overall, safety, confidence, uploadScore);
+        var uploadScore = CalculateUploadScore(safety, sales, profit, confidence, competition, product);
+        var uploadDecision = UploadDecisionFor(uploadScore, safety, confidence, competition, product);
+        var recommendation = RecommendationFor(overall, safety, confidence, uploadScore, product);
 
         return new ProductScore(safety, sales, profit, overall, confidence, competition, uploadScore, uploadDecision, recommendation);
     }
@@ -30,6 +30,10 @@ public sealed class ScoringEngine
         if (ContainsRiskText(product.Title)) score -= 15;
         if (product.Rating is > 0 and < 4.0m) score -= 10;
         if (product.ReviewCount is > 0 and < 25) score -= 6;
+        if (product.ImageCount == 0) score -= 18;
+        else if (product.ImageCount < 4) score -= 10;
+        if (product.VisualRiskLevel.Equals("HIGH", StringComparison.OrdinalIgnoreCase)) score -= 12;
+        else if (product.VisualRiskLevel.Equals("MEDIUM", StringComparison.OrdinalIgnoreCase)) score -= 6;
 
         return Clamp(score);
     }
@@ -42,6 +46,7 @@ public sealed class ScoringEngine
         if (product.Price is >= 9m and <= 60m) score += 13;
         else if (product.Price is > 60m and <= 98m) score += 7;
         if (!product.IsSponsored) score += 5;
+        if (product.ImageCount >= 4) score += 4;
         if (product.Rating >= 4.5m) score += 10;
         else if (product.Rating >= 4.2m) score += 7;
         else if (product.Rating >= 4.0m) score += 4;
@@ -63,6 +68,7 @@ public sealed class ScoringEngine
         else if (product.Price is > 70m and <= 98m) score += 5;
         if (product.IsAmazonChoice) score += 8;
         if (product.Rating >= 4.4m && product.ReviewCount >= 100) score += 5;
+        if (product.ImageCount >= 4) score += 3;
 
         return Clamp(score);
     }
@@ -74,10 +80,15 @@ public sealed class ScoringEngine
         if (product.IsAmazonChoice) confidence += 4;
         if (product.Rating >= 4.5m) confidence += 4;
         if (product.ReviewCount >= 1000) confidence += 4;
+        if (product.ImageCount >= 4) confidence += 5;
         if (product.HasLowStockWarning) confidence -= 10;
         if (product.HasUsuallyKeepItemText) confidence -= 8;
         if (product.IsSponsored) confidence -= 4;
         if (ContainsRiskText(product.Title)) confidence -= 8;
+        if (product.ImageCount == 0) confidence -= 12;
+        else if (product.ImageCount < 4) confidence -= 7;
+        if (product.VisualRiskLevel.Equals("HIGH", StringComparison.OrdinalIgnoreCase)) confidence -= 10;
+        else if (product.VisualRiskLevel.Equals("MEDIUM", StringComparison.OrdinalIgnoreCase)) confidence -= 5;
 
         return Clamp(confidence);
     }
@@ -101,23 +112,29 @@ public sealed class ScoringEngine
         return Clamp(score);
     }
 
-    private static int CalculateUploadScore(int safety, int sales, int profit, int confidence, int competition)
+    private static int CalculateUploadScore(int safety, int sales, int profit, int confidence, int competition, ProductResult product)
     {
         var lowCompetitionBonus = 100 - competition;
-        return Clamp((int)Math.Round((confidence * 0.32) + (safety * 0.24) + (sales * 0.18) + (profit * 0.16) + (lowCompetitionBonus * 0.10)));
+        var uploadScore = (int)Math.Round((confidence * 0.32) + (safety * 0.24) + (sales * 0.18) + (profit * 0.16) + (lowCompetitionBonus * 0.10));
+        if (product.ImageCount >= 4) uploadScore += 3;
+        else if (product.ImageCount == 0) uploadScore -= 10;
+        else uploadScore -= 6;
+        return Clamp(uploadScore);
     }
 
-    private static string UploadDecisionFor(int uploadScore, int safetyScore, int confidenceScore, int competitionScore)
+    private static string UploadDecisionFor(int uploadScore, int safetyScore, int confidenceScore, int competitionScore, ProductResult product)
     {
         if (safetyScore < 60 || confidenceScore < 60 || uploadScore < 60) return "REJECT";
+        if (product.ImageCount < 4 && uploadScore >= 88) return "WATCH";
         if (uploadScore >= 88 && safetyScore >= 80 && confidenceScore >= 82 && competitionScore <= 70) return "UPLOAD NOW";
         if (uploadScore >= 74) return "WATCH";
         return "REVIEW";
     }
 
-    private static string RecommendationFor(int overallScore, int safetyScore, int confidenceScore, int uploadScore)
+    private static string RecommendationFor(int overallScore, int safetyScore, int confidenceScore, int uploadScore, ProductResult product)
     {
         if (safetyScore < 60 || overallScore < 60 || confidenceScore < 60 || uploadScore < 60) return "Reject";
+        if (product.ImageCount < 4 && uploadScore >= 88) return "Review";
         if (uploadScore >= 88 && overallScore >= 82 && safetyScore >= 80 && confidenceScore >= 82) return "Upload";
         if (uploadScore >= 74 || overallScore >= 75) return "Review";
         return "Caution";
