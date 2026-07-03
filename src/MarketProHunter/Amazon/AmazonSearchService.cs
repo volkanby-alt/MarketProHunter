@@ -76,7 +76,7 @@ public sealed class AmazonSearchService
             new ParallelOptions { MaxDegreeOfParallelism = maxParallel, CancellationToken = cancellationToken },
             async (keyword, token) =>
             {
-                var client = new AmazonSearchClient(settings);
+                using var client = new AmazonSearchClient(settings);
                 var parser = new AmazonSearchParser();
                 logProgress?.Report($"Arama başlıyor: {keyword}");
 
