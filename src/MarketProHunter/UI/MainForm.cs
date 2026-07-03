@@ -196,9 +196,9 @@ public sealed class MainForm : Form
         _resultsGrid.Dock = DockStyle.Fill; _resultsGrid.ReadOnly = true; _resultsGrid.AllowUserToAddRows = false; _resultsGrid.AllowUserToDeleteRows = false;
         _resultsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; _resultsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _resultsGrid.SelectionChanged += (_, _) => ShowSelectedProductDetails();
-        _resultsGrid.Columns.Add("fav", "Fav"); _resultsGrid.Columns.Add("overall", "Overall"); _resultsGrid.Columns.Add("rec", "Rec");
+        _resultsGrid.Columns.Add("fav", "Fav"); _resultsGrid.Columns.Add("confidence", "Conf %"); _resultsGrid.Columns.Add("overall", "Overall"); _resultsGrid.Columns.Add("rec", "Rec");
         _resultsGrid.Columns.Add("sell", "eBay Sell"); _resultsGrid.Columns.Add("net", "Net $"); _resultsGrid.Columns.Add("margin", "Margin %"); _resultsGrid.Columns.Add("profitDecision", "Profit");
-        _resultsGrid.Columns.Add("stars", "Stars"); _resultsGrid.Columns.Add("safety", "Safety"); _resultsGrid.Columns.Add("sales", "Sales"); _resultsGrid.Columns.Add("profitScore", "ProfitScore");
+        _resultsGrid.Columns.Add("rating", "Rating"); _resultsGrid.Columns.Add("reviews", "Reviews"); _resultsGrid.Columns.Add("stars", "Stars"); _resultsGrid.Columns.Add("safety", "Safety"); _resultsGrid.Columns.Add("sales", "Sales"); _resultsGrid.Columns.Add("profitScore", "ProfitScore");
         _resultsGrid.Columns.Add("asin", "ASIN"); _resultsGrid.Columns.Add("title", "Title"); _resultsGrid.Columns.Add("brand", "Brand"); _resultsGrid.Columns.Add("price", "Amazon $"); _resultsGrid.Columns.Add("keyword", "Keyword"); _resultsGrid.Columns.Add("url", "URL");
     }
 
@@ -248,7 +248,7 @@ public sealed class MainForm : Form
     private void RefreshGrid()
     {
         _resultsGrid.Rows.Clear();
-        foreach (var p in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.OverallScore).ThenByDescending(p => p.NetProfit)) AddProductRowToGrid(p);
+        foreach (var p in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.ConfidenceScore).ThenByDescending(p => p.OverallScore).ThenByDescending(p => p.NetProfit)) AddProductRowToGrid(p);
         _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Toplam: {_allResults.Count}";
     }
 
@@ -268,9 +268,9 @@ public sealed class MainForm : Form
 
     private void AddProductRowToGrid(ProductResult product)
     {
-        var index = _resultsGrid.Rows.Add(_decisionStore.IsFavorite(product.Asin) ? "⭐" : "", product.OverallScore, product.Recommendation, $"${product.RecommendedSalePrice}", $"${product.NetProfit}", product.NetMarginPercent, product.ProfitDecision, product.Stars, product.SafetyScore, product.SalesScore, product.ProfitScore, product.Asin, product.Title, product.Brand, $"${product.Price}", product.SearchKeyword, product.ProductUrl);
+        var index = _resultsGrid.Rows.Add(_decisionStore.IsFavorite(product.Asin) ? "⭐" : "", product.ConfidenceScore, product.OverallScore, product.Recommendation, $"${product.RecommendedSalePrice}", $"${product.NetProfit}", product.NetMarginPercent, product.ProfitDecision, product.Rating, product.ReviewCount, product.Stars, product.SafetyScore, product.SalesScore, product.ProfitScore, product.Asin, product.Title, product.Brand, $"${product.Price}", product.SearchKeyword, product.ProductUrl);
         var row = _resultsGrid.Rows[index]; row.Tag = product;
-        row.DefaultCellStyle.BackColor = product.OverallScore switch { >= 90 => Color.Honeydew, >= 75 => Color.LightYellow, >= 60 => Color.Moccasin, _ => Color.MistyRose };
+        row.DefaultCellStyle.BackColor = product.ConfidenceScore switch { >= 90 => Color.Honeydew, >= 75 => Color.LightYellow, >= 60 => Color.Moccasin, _ => Color.MistyRose };
     }
 
     private ProductResult? GetSelectedProduct() => _resultsGrid.SelectedRows.Count == 0 ? null : _resultsGrid.SelectedRows[0].Tag as ProductResult;
@@ -281,13 +281,14 @@ public sealed class MainForm : Form
 
     private static string BuildDetailText(ProductResult p, bool isFavorite)
     {
-        var reasons = new List<string> { p.IsAmazonChoice ? "+ Amazon Choice" : "- Amazon Choice değil", p.HasLowStockWarning ? "- Stok az uyarısı var" : "+ Stok uyarısı yok", p.HasUsuallyKeepItemText ? "- Usually keep uyarısı var" : "+ Usually keep uyarısı yok", p.IsSponsored ? "- Sponsored sonuç" : "+ Organic sonuç", p.Price <= 60 ? "+ Amazon fiyatı iyi aralıkta" : "- Amazon fiyatı üst aralıkta", p.ProfitDecision == "Profitable" ? "+ eBay kâr hedefini karşılıyor" : "- eBay kârı düşük" };
+        var reasons = new List<string> { p.IsAmazonChoice ? "+ Amazon Choice" : "- Amazon Choice değil", p.HasLowStockWarning ? "- Stok az uyarısı var" : "+ Stok uyarısı yok", p.HasUsuallyKeepItemText ? "- Usually keep uyarısı var" : "+ Usually keep uyarısı yok", p.IsSponsored ? "- Sponsored sonuç" : "+ Organic sonuç", p.Price <= 60 ? "+ Amazon fiyatı iyi aralıkta" : "- Amazon fiyatı üst aralıkta", p.Rating >= 4.3m ? "+ Rating güçlü" : "- Rating zayıf veya okunamadı", p.ReviewCount >= 100 ? "+ Yorum sayısı güven veriyor" : "- Yorum sayısı düşük veya okunamadı", p.ProfitDecision == "Profitable" ? "+ eBay kâr hedefini karşılıyor" : "- eBay kârı düşük" };
         return $"Favorite: {(isFavorite ? "YES ⭐" : "NO")}{Environment.NewLine}" +
                $"ASIN: {p.Asin}{Environment.NewLine}Brand: {p.Brand}{Environment.NewLine}Amazon Price: ${p.Price}{Environment.NewLine}" +
+               $"Rating: {p.Rating}/5 | Reviews: {p.ReviewCount}{Environment.NewLine}" +
                $"Recommended eBay Price: ${p.RecommendedSalePrice}{Environment.NewLine}Net Profit: ${p.NetProfit}{Environment.NewLine}Net Margin: {p.NetMarginPercent}%{Environment.NewLine}" +
                $"Profit Decision: {p.ProfitDecision}{Environment.NewLine}eBay Fee: ${p.EbayFee}{Environment.NewLine}Promoted Fee: ${p.PromotedFee}{Environment.NewLine}" +
                $"Keyword: {p.SearchKeyword}{Environment.NewLine}URL: {p.ProductUrl}{Environment.NewLine}{Environment.NewLine}" +
-               $"Safety: {p.SafetyScore}/100{Environment.NewLine}Sales: {p.SalesScore}/100{Environment.NewLine}Profit Score: {p.ProfitScore}/100{Environment.NewLine}" +
+               $"Confidence: {p.ConfidenceScore}%{Environment.NewLine}Safety: {p.SafetyScore}/100{Environment.NewLine}Sales: {p.SalesScore}/100{Environment.NewLine}Profit Score: {p.ProfitScore}/100{Environment.NewLine}" +
                $"Overall: {p.OverallScore}/100 {p.Stars}{Environment.NewLine}Recommendation: {p.Recommendation}{Environment.NewLine}{Environment.NewLine}" +
                "Neden bu puan?" + Environment.NewLine + string.Join(Environment.NewLine, reasons) + Environment.NewLine + Environment.NewLine + $"Title:{Environment.NewLine}{p.Title}";
     }
