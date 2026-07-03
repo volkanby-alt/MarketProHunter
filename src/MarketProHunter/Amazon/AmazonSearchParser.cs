@@ -55,6 +55,8 @@ public sealed partial class AmazonSearchParser
                 IsSponsored = ContainsAny(decodedBlock, "Sponsored", "sponsored"),
                 HasLowStockWarning = HasLowStockText(decodedBlock),
                 HasUsuallyKeepItemText = HasUsuallyKeepText(decodedBlock),
+                Rating = ExtractRating(decodedBlock),
+                ReviewCount = ExtractReviewCount(decodedBlock),
                 ProductUrl = productUrl,
                 SearchKeyword = keyword,
                 Page = page
@@ -123,6 +125,51 @@ public sealed partial class AmazonSearchParser
         }
 
         return 0m;
+    }
+
+    private static decimal ExtractRating(string block)
+    {
+        var patterns = new[]
+        {
+            "(?<rating>[0-5](?:\\.[0-9])?)\\s+out of 5 stars",
+            "aria-label=\"(?<rating>[0-5](?:\\.[0-9])?)\\s+out of 5 stars\"",
+            "(?<rating>[0-5](?:\\.[0-9])?)\\s+stars"
+        };
+
+        foreach (var pattern in patterns)
+        {
+            var match = Regex.Match(block, pattern, RegexOptions.IgnoreCase);
+            if (match.Success && decimal.TryParse(match.Groups["rating"].Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var rating))
+            {
+                return rating;
+            }
+        }
+
+        return 0m;
+    }
+
+    private static int ExtractReviewCount(string block)
+    {
+        var patterns = new[]
+        {
+            "aria-label=\"(?<reviews>[0-9,]+)\"",
+            ">(?<reviews>[0-9,]+)</span>\\s*</a>",
+            ">(?<reviews>[0-9,]+)</a>"
+        };
+
+        foreach (var pattern in patterns)
+        {
+            foreach (Match match in Regex.Matches(block, pattern, RegexOptions.IgnoreCase))
+            {
+                var raw = match.Groups["reviews"].Value.Replace(",", "");
+                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var reviews) && reviews > 0)
+                {
+                    return reviews;
+                }
+            }
+        }
+
+        return 0;
     }
 
     private static decimal ParsePrice(string raw)
