@@ -9,11 +9,14 @@ public sealed class ScoringEngine
         var safety = CalculateSafetyScore(product);
         var sales = CalculateSalesScore(product);
         var profit = CalculateProfitScore(product);
-        var overall = Clamp((int)Math.Round((safety * 0.40) + (sales * 0.35) + (profit * 0.25)));
+        var overall = Clamp((int)Math.Round((safety * 0.38) + (sales * 0.35) + (profit * 0.27)));
         var confidence = CalculateConfidenceScore(product, safety, sales, profit, overall);
-        var recommendation = RecommendationFor(overall, safety, confidence);
+        var competition = CalculateCompetitionScore(product);
+        var uploadScore = CalculateUploadScore(safety, sales, profit, confidence, competition);
+        var uploadDecision = UploadDecisionFor(uploadScore, safety, confidence, competition);
+        var recommendation = RecommendationFor(overall, safety, confidence, uploadScore);
 
-        return new ProductScore(safety, sales, profit, overall, confidence, recommendation);
+        return new ProductScore(safety, sales, profit, overall, confidence, competition, uploadScore, uploadDecision, recommendation);
     }
 
     private static int CalculateSafetyScore(ProductResult product)
@@ -36,16 +39,12 @@ public sealed class ScoringEngine
         var score = 40;
 
         if (product.IsAmazonChoice) score += 25;
-
         if (product.Price is >= 9m and <= 60m) score += 13;
         else if (product.Price is > 60m and <= 98m) score += 7;
-
         if (!product.IsSponsored) score += 5;
-
         if (product.Rating >= 4.5m) score += 10;
         else if (product.Rating >= 4.2m) score += 7;
         else if (product.Rating >= 4.0m) score += 4;
-
         if (product.ReviewCount >= 5000) score += 12;
         else if (product.ReviewCount >= 1000) score += 9;
         else if (product.ReviewCount >= 250) score += 6;
@@ -62,7 +61,6 @@ public sealed class ScoringEngine
         else if (product.Price is > 25m and <= 45m) score += 20;
         else if (product.Price is > 45m and <= 70m) score += 12;
         else if (product.Price is > 70m and <= 98m) score += 5;
-
         if (product.IsAmazonChoice) score += 8;
         if (product.Rating >= 4.4m && product.ReviewCount >= 100) score += 5;
 
@@ -84,24 +82,52 @@ public sealed class ScoringEngine
         return Clamp(confidence);
     }
 
-    private static string RecommendationFor(int overallScore, int safetyScore, int confidenceScore)
+    private static int CalculateCompetitionScore(ProductResult product)
     {
-        if (safetyScore < 60 || overallScore < 60 || confidenceScore < 60)
-        {
-            return "Reject";
-        }
+        var score = 45;
 
-        if (overallScore >= 88 && safetyScore >= 80 && confidenceScore >= 85)
-        {
-            return "Upload";
-        }
+        if (product.ReviewCount >= 10000) score += 25;
+        else if (product.ReviewCount >= 5000) score += 18;
+        else if (product.ReviewCount >= 1000) score += 12;
+        else if (product.ReviewCount >= 250) score += 7;
+        else if (product.ReviewCount is > 0 and < 50) score -= 8;
 
-        if (overallScore >= 75 && confidenceScore >= 72)
-        {
-            return "Review";
-        }
+        if (product.IsAmazonChoice) score += 8;
+        if (product.IsSponsored) score += 6;
+        if (product.Price is >= 9m and <= 35m) score += 8;
+        if (ContainsGenericOpportunityText(product.Title)) score -= 10;
+        if (ContainsRiskText(product.Title)) score += 10;
 
+        return Clamp(score);
+    }
+
+    private static int CalculateUploadScore(int safety, int sales, int profit, int confidence, int competition)
+    {
+        var lowCompetitionBonus = 100 - competition;
+        return Clamp((int)Math.Round((confidence * 0.32) + (safety * 0.24) + (sales * 0.18) + (profit * 0.16) + (lowCompetitionBonus * 0.10)));
+    }
+
+    private static string UploadDecisionFor(int uploadScore, int safetyScore, int confidenceScore, int competitionScore)
+    {
+        if (safetyScore < 60 || confidenceScore < 60 || uploadScore < 60) return "REJECT";
+        if (uploadScore >= 88 && safetyScore >= 80 && confidenceScore >= 82 && competitionScore <= 70) return "UPLOAD NOW";
+        if (uploadScore >= 74) return "WATCH";
+        return "REVIEW";
+    }
+
+    private static string RecommendationFor(int overallScore, int safetyScore, int confidenceScore, int uploadScore)
+    {
+        if (safetyScore < 60 || overallScore < 60 || confidenceScore < 60 || uploadScore < 60) return "Reject";
+        if (uploadScore >= 88 && overallScore >= 82 && safetyScore >= 80 && confidenceScore >= 82) return "Upload";
+        if (uploadScore >= 74 || overallScore >= 75) return "Review";
         return "Caution";
+    }
+
+    private static bool ContainsGenericOpportunityText(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return false;
+        var words = new[] { "organizer", "holder", "storage", "cleaning", "brush", "filter", "cover", "mat", "tray", "rack", "tool" };
+        return words.Any(word => title.Contains(word, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool ContainsRiskText(string title)
