@@ -8,7 +8,7 @@ public sealed record SearchSettings
     public decimal MaxPrice { get; init; } = 98m;
     public bool RequireAmazonChoice { get; init; } = true;
     public bool ExcludeLowStock { get; init; } = true;
-    public bool ExcludeUsuallyKeepItem { get; init; } = true;
+    public bool ExcludeUsuallyKeepItem { get; init; } = false;
     public int DelayBetweenPagesMs { get; init; } = 2500;
     public int MaxParallelSearches { get; init; } = 3;
 
