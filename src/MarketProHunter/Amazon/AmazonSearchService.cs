@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using System.Threading;
 using MarketProHunter.Export;
 using MarketProHunter.Filters;
@@ -135,12 +136,15 @@ public sealed class AmazonSearchService
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         var outputPath = Path.Combine(AppContext.BaseDirectory, "output", $"amazon_results_{timestamp}.csv");
         var smartQueuePath = Path.Combine(AppContext.BaseDirectory, "output", $"smart_queue_top50_{timestamp}.csv");
+        var summaryPath = Path.Combine(AppContext.BaseDirectory, "output", $"run_summary_{timestamp}.txt");
         await exporter.WriteAsync(outputPath, orderedAccepted, cancellationToken);
 
         var smartQueue = smartQueueEngine.Build(orderedAccepted, SmartQueueEngine.DefaultQueueSize);
         await exporter.WriteSmartQueueAsync(smartQueuePath, smartQueue, cancellationToken);
+        await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, orderedAccepted, smartQueue, cancellationToken);
         logProgress?.Report($"Smart Queue hazır: {smartQueue.SelectedCount}/{smartQueue.RequestedCount} ürün | Beklenen net kâr: ${smartQueue.ExpectedNetProfit} | Ortalama Upload: {smartQueue.AverageUploadScore} | Ortalama Confidence: {smartQueue.AverageConfidenceScore}%");
         logProgress?.Report($"Smart Queue CSV: {smartQueuePath}");
+        logProgress?.Report($"Özet rapor: {summaryPath}");
 
         return new SearchRunResult(
             scannedCount,
@@ -148,10 +152,56 @@ public sealed class AmazonSearchService
             skippedCount,
             outputPath,
             smartQueuePath,
+            summaryPath,
             smartQueue.SelectedCount,
             smartQueue.ExpectedNetProfit,
             smartQueue.AverageUploadScore,
             smartQueue.AverageConfidenceScore);
+    }
+
+    private static async Task WriteSummaryAsync(
+        string path,
+        IReadOnlyList<string> keywords,
+        int maxPages,
+        int scannedCount,
+        int skippedCount,
+        IReadOnlyList<ProductResult> acceptedProducts,
+        SmartQueueResult smartQueue,
+        CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var builder = new StringBuilder();
+        builder.AppendLine("MarketProHunter Run Summary");
+        builder.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        builder.AppendLine($"Keywords: {keywords.Count}");
+        builder.AppendLine($"Pages per keyword: {maxPages}");
+        builder.AppendLine($"Scanned: {scannedCount}");
+        builder.AppendLine($"Accepted: {acceptedProducts.Count}");
+        builder.AppendLine($"Skipped: {skippedCount}");
+        builder.AppendLine($"Smart Queue: {smartQueue.SelectedCount}/{smartQueue.RequestedCount}");
+        builder.AppendLine($"Expected net profit: ${smartQueue.ExpectedNetProfit:0.00}");
+        builder.AppendLine($"Average upload score: {smartQueue.AverageUploadScore:0.00}");
+        builder.AppendLine($"Average confidence: {smartQueue.AverageConfidenceScore:0.00}%");
+        builder.AppendLine();
+        builder.AppendLine("Top 10 Smart Queue Products");
+        builder.AppendLine("---------------------------");
+
+        foreach (var item in smartQueue.Items.Take(10))
+        {
+            var p = item.Product;
+            builder.AppendLine($"#{item.Rank} {item.Tier} | {p.Asin} | Upload {p.UploadScore} | Risk {p.RiskLevel} | Net ${p.NetProfit:0.00}");
+            builder.AppendLine($"Brand: {p.Brand}");
+            builder.AppendLine($"Title: {Shorten(p.Title)}");
+            builder.AppendLine($"Why: {p.OpportunitySummary}");
+            builder.AppendLine();
+        }
+
+        await File.WriteAllTextAsync(path, builder.ToString(), Encoding.UTF8, cancellationToken);
     }
 
     private static string Shorten(string value)
