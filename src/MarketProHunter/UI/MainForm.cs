@@ -18,6 +18,7 @@ public sealed class MainForm : Form
     private readonly CheckBox _amazonChoiceCheckBox = new();
     private readonly CheckBox _lowStockCheckBox = new();
     private readonly CheckBox _usuallyKeepCheckBox = new();
+    private readonly CheckBox _sponsoredCheckBox = new();
     private readonly ComboBox _recommendationFilter = new();
     private readonly NumericUpDown _minOverallFilter = new();
     private readonly NumericUpDown _ebayFeePercentNumeric = new();
@@ -119,6 +120,7 @@ public sealed class MainForm : Form
         _amazonChoiceCheckBox.Text = "Amazon Choice"; _amazonChoiceCheckBox.Checked = true;
         _lowStockCheckBox.Text = "Az stok ele"; _lowStockCheckBox.Checked = true;
         _usuallyKeepCheckBox.Text = "Usually keep ele"; _usuallyKeepCheckBox.Checked = false;
+        _sponsoredCheckBox.Text = "Sponsored ele"; _sponsoredCheckBox.Checked = true;
         AddLabeledControl(panel, "Ekstra Arama", _keywordTextBox, 0, 0);
         AddLabeledControl(panel, "Sayfa", _pagesNumeric, 1, 0);
         AddLabeledControl(panel, "Paralel", _parallelNumeric, 2, 0);
@@ -163,7 +165,7 @@ public sealed class MainForm : Form
         AddLabeledControl(panel, "Promoted %", _promotedPercentNumeric, 3, 0);
         AddLabeledControl(panel, "Target %", _targetProfitPercentNumeric, 4, 0);
         AddLabeledControl(panel, "Min Net $", _minNetProfitNumeric, 5, 0);
-        panel.Controls.Add(_applyFilterButton, 6, 0); panel.Controls.Add(_clearFilterButton, 7, 0);
+        panel.Controls.Add(_applyFilterButton, 6, 0); panel.Controls.Add(_clearFilterButton, 7, 0); panel.Controls.Add(_sponsoredCheckBox, 8, 0);
         group.Controls.Add(panel);
         return group;
     }
@@ -209,13 +211,15 @@ public sealed class MainForm : Form
         _allResults.Clear(); _resultsGrid.Rows.Clear(); _logTextBox.Clear(); _detailTextBox.Text = "Tarama başladı...";
         AppendLog($"Toplam anahtar kelime: {keywords.Count}"); AppendLog($"Paralel görev sayısı: {_parallelNumeric.Value}");
         SetRunningState(true); _cancellationTokenSource = new CancellationTokenSource();
-        var settings = new SearchSettings { ZipCode = _zipTextBox.Text.Trim(), MinPrice = _minPriceNumeric.Value, MaxPrice = _maxPriceNumeric.Value, MaxParallelSearches = (int)_parallelNumeric.Value, RequireAmazonChoice = _amazonChoiceCheckBox.Checked, ExcludeLowStock = _lowStockCheckBox.Checked, ExcludeUsuallyKeepItem = _usuallyKeepCheckBox.Checked };
+        var settings = new SearchSettings { ZipCode = _zipTextBox.Text.Trim(), MinPrice = _minPriceNumeric.Value, MaxPrice = _maxPriceNumeric.Value, MaxParallelSearches = (int)_parallelNumeric.Value, RequireAmazonChoice = _amazonChoiceCheckBox.Checked, ExcludeLowStock = _lowStockCheckBox.Checked, ExcludeUsuallyKeepItem = _usuallyKeepCheckBox.Checked, ExcludeSponsored = _sponsoredCheckBox.Checked };
         var profitSettings = BuildProfitSettings();
         var service = new AmazonSearchService(); var logProgress = new Progress<string>(AppendLog); var productProgress = new Progress<ProductResult>(AddProductRow);
         try
         {
             var result = await service.RunManyAsync(keywords, (int)_pagesNumeric.Value, settings, profitSettings, logProgress, productProgress, _cancellationTokenSource.Token);
             _statusLabel.Text = $"Bitti: {result.AcceptedCount} uygun ürün"; AppendLog($"CSV dosyası: {result.OutputPath}");
+            if (!string.IsNullOrWhiteSpace(result.SmartQueuePath)) AppendLog($"Smart Queue CSV: {result.SmartQueuePath}");
+            if (!string.IsNullOrWhiteSpace(result.SummaryPath)) AppendLog($"Özet rapor: {result.SummaryPath}");
             MessageBox.Show($"Tarama bitti. Uygun ürün: {result.AcceptedCount}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException) { _statusLabel.Text = "Durduruldu"; AppendLog("Tarama kullanıcı tarafından durduruldu."); }
