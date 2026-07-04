@@ -6,6 +6,7 @@ public sealed record SearchRunResult(
     int SkippedCount,
     string OutputPath,
     string SmartQueuePath = "",
+    string SummaryPath = "",
     int SmartQueueCount = 0,
     decimal SmartQueueExpectedNetProfit = 0,
     decimal SmartQueueAverageUploadScore = 0,
