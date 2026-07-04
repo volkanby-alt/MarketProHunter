@@ -132,7 +132,7 @@ public sealed class AmazonSearchService
             }
         });
 
-        var orderedAccepted = accepted.OrderByDescending(p => p.UploadScore).ThenByDescending(p => p.ConfidenceScore).ThenByDescending(p => p.OverallScore).ThenByDescending(p => p.NetProfit).ThenBy(p => p.CompetitionScore).ToList();
+        var orderedAccepted = OrderForOutput(accepted).ToList();
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         var outputPath = Path.Combine(AppContext.BaseDirectory, "output", $"amazon_results_{timestamp}.csv");
         var smartQueuePath = Path.Combine(AppContext.BaseDirectory, "output", $"smart_queue_top50_{timestamp}.csv");
@@ -157,6 +157,16 @@ public sealed class AmazonSearchService
             smartQueue.ExpectedNetProfit,
             smartQueue.AverageUploadScore,
             smartQueue.AverageConfidenceScore);
+    }
+
+    private static IOrderedEnumerable<ProductResult> OrderForOutput(IEnumerable<ProductResult> products)
+    {
+        return products
+            .OrderByDescending(p => p.UploadScore)
+            .ThenByDescending(p => p.NetProfit)
+            .ThenBy(p => p.CompetitionScore)
+            .ThenByDescending(p => p.ConfidenceScore)
+            .ThenByDescending(p => p.ImageCount);
     }
 
     private static async Task WriteSummaryAsync(
