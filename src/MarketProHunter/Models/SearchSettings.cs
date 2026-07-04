@@ -9,6 +9,7 @@ public sealed record SearchSettings
     public bool RequireAmazonChoice { get; init; } = true;
     public bool ExcludeLowStock { get; init; } = true;
     public bool ExcludeUsuallyKeepItem { get; init; } = false;
+    public bool ExcludeSponsored { get; init; } = true;
     public int DelayBetweenPagesMs { get; init; } = 2500;
     public int MaxParallelSearches { get; init; } = 3;
 
