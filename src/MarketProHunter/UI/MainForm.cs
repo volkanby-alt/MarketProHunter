@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using MarketProHunter.Amazon;
 using MarketProHunter.Categories;
 using MarketProHunter.Decisions;
@@ -41,6 +42,7 @@ public sealed class MainForm : Form
     private readonly List<ProductResult> _allResults = new();
     private readonly UserDecisionStore _decisionStore = new();
     private CancellationTokenSource? _cancellationTokenSource;
+    private Stopwatch? _runTimer;
 
     public MainForm()
     {
@@ -209,6 +211,7 @@ public sealed class MainForm : Form
         var keywords = BuildKeywordList();
         if (keywords.Count == 0) { MessageBox.Show("En az bir kategori seçin veya ekstra arama kelimesi yazın.", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         _allResults.Clear(); _resultsGrid.Rows.Clear(); _logTextBox.Clear(); _detailTextBox.Text = "Tarama başladı...";
+        _runTimer = Stopwatch.StartNew();
         AppendLog($"Toplam anahtar kelime: {keywords.Count}"); AppendLog($"Paralel görev sayısı: {_parallelNumeric.Value}");
         SetRunningState(true); _cancellationTokenSource = new CancellationTokenSource();
         var settings = new SearchSettings { ZipCode = _zipTextBox.Text.Trim(), MinPrice = _minPriceNumeric.Value, MaxPrice = _maxPriceNumeric.Value, MaxParallelSearches = (int)_parallelNumeric.Value, RequireAmazonChoice = _amazonChoiceCheckBox.Checked, ExcludeLowStock = _lowStockCheckBox.Checked, ExcludeUsuallyKeepItem = _usuallyKeepCheckBox.Checked, ExcludeSponsored = _sponsoredCheckBox.Checked };
@@ -217,13 +220,14 @@ public sealed class MainForm : Form
         try
         {
             var result = await service.RunManyAsync(keywords, (int)_pagesNumeric.Value, settings, profitSettings, logProgress, productProgress, _cancellationTokenSource.Token);
-            _statusLabel.Text = $"Bitti: {result.AcceptedCount} uygun ürün"; AppendLog($"CSV dosyası: {result.OutputPath}");
+            _runTimer?.Stop();
+            _statusLabel.Text = $"Bitti: {result.AcceptedCount} uygun ürün | Süre: {FormatElapsed()}"; AppendLog($"CSV dosyası: {result.OutputPath}");
             if (!string.IsNullOrWhiteSpace(result.SmartQueuePath)) AppendLog($"Smart Queue CSV: {result.SmartQueuePath}");
             if (!string.IsNullOrWhiteSpace(result.SummaryPath)) AppendLog($"Özet rapor: {result.SummaryPath}");
-            MessageBox.Show($"Tarama bitti. Uygun ürün: {result.AcceptedCount}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"Tarama bitti. Uygun ürün: {result.AcceptedCount}\nSüre: {FormatElapsed()}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
-        catch (OperationCanceledException) { _statusLabel.Text = "Durduruldu"; AppendLog("Tarama kullanıcı tarafından durduruldu."); }
-        catch (Exception ex) { _statusLabel.Text = "Hata"; AppendLog("HATA: " + ex.Message); MessageBox.Show(ex.Message, "MarketProHunter Hata", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (OperationCanceledException) { _runTimer?.Stop(); _statusLabel.Text = $"Durduruldu | Süre: {FormatElapsed()}"; AppendLog("Tarama kullanıcı tarafından durduruldu."); }
+        catch (Exception ex) { _runTimer?.Stop(); _statusLabel.Text = "Hata"; AppendLog("HATA: " + ex.Message); MessageBox.Show(ex.Message, "MarketProHunter Hata", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { SetRunningState(false); _cancellationTokenSource.Dispose(); _cancellationTokenSource = null; }
     }
 
@@ -252,8 +256,8 @@ public sealed class MainForm : Form
     private void RefreshGrid()
     {
         _resultsGrid.Rows.Clear();
-        foreach (var p in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.UploadScore).ThenByDescending(p => p.ConfidenceScore).ThenBy(p => p.CompetitionScore).ThenByDescending(p => p.NetProfit)) AddProductRowToGrid(p);
-        _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Toplam: {_allResults.Count}";
+        foreach (var p in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.UploadScore).ThenByDescending(p => p.NetProfit).ThenBy(p => p.CompetitionScore).ThenByDescending(p => p.ConfidenceScore).ThenByDescending(p => p.ImageCount)) AddProductRowToGrid(p);
+        UpdateLiveStatus();
     }
 
     private void SetRunningState(bool running)
@@ -268,6 +272,7 @@ public sealed class MainForm : Form
     {
         if (_decisionStore.IsRejected(product)) { AppendLog($"SKIP {product.Asin} | Kullanıcı kara listesinde"); return; }
         _allResults.Add(product); if (PassesCurrentFilter(product)) AddProductRowToGrid(product);
+        UpdateLiveStatus();
     }
 
     private void AddProductRowToGrid(ProductResult product)
@@ -275,6 +280,18 @@ public sealed class MainForm : Form
         var index = _resultsGrid.Rows.Add(_decisionStore.IsFavorite(product.Asin) ? "⭐" : "", product.UploadScore, product.UploadDecision, product.VisualRiskLevel, product.ImageCount, product.CompetitionScore, product.ConfidenceScore, product.OverallScore, product.Recommendation, $"${product.RecommendedSalePrice}", $"${product.NetProfit}", product.NetMarginPercent, product.ProfitDecision, product.Rating, product.ReviewCount, product.Stars, product.SafetyScore, product.SalesScore, product.ProfitScore, product.Asin, product.Title, product.Brand, $"${product.Price}", product.SearchKeyword, product.ProductUrl);
         var row = _resultsGrid.Rows[index]; row.Tag = product;
         row.DefaultCellStyle.BackColor = product.UploadScore switch { >= 88 => Color.Honeydew, >= 74 => Color.LightYellow, >= 60 => Color.Moccasin, _ => Color.MistyRose };
+    }
+
+    private void UpdateLiveStatus()
+    {
+        var profit = _allResults.Sum(x => x.NetProfit);
+        _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Toplam: {_allResults.Count} | Net: ${profit:0.00} | Süre: {FormatElapsed()}";
+    }
+
+    private string FormatElapsed()
+    {
+        var elapsed = _runTimer?.Elapsed ?? TimeSpan.Zero;
+        return elapsed.TotalHours >= 1 ? elapsed.ToString(@"h\:mm\:ss") : elapsed.ToString(@"mm\:ss");
     }
 
     private ProductResult? GetSelectedProduct() => _resultsGrid.SelectedRows.Count == 0 ? null : _resultsGrid.SelectedRows[0].Tag as ProductResult;
