@@ -58,6 +58,7 @@ public sealed class AmazonSearchService
         var scannedCount = 0;
         var acceptedCount = 0;
         var skippedCount = 0;
+        var failedPageCount = 0;
         var maxParallel = Math.Clamp(settings.MaxParallelSearches, 1, 8);
 
         logProgress?.Report($"Paralel tarama başlıyor. Anahtar kelime: {keywordList.Count}, paralel görev: {maxParallel}");
@@ -75,7 +76,14 @@ public sealed class AmazonSearchService
                 token.ThrowIfCancellationRequested();
                 logProgress?.Report($"{keyword} | Sayfa: {page}/{maxPages}");
 
-                var html = await client.FetchSearchPageAsync(keyword, page, token);
+                var html = await FetchPageWithRetryAsync(client, keyword, page, logProgress, token);
+                if (string.IsNullOrWhiteSpace(html))
+                {
+                    Interlocked.Increment(ref failedPageCount);
+                    logProgress?.Report($"WARN {keyword} | Sayfa {page}: alınamadı, sonraki sayfaya geçiliyor.");
+                    continue;
+                }
+
                 var products = parser.Parse(html, keyword, page);
                 logProgress?.Report($"{keyword} | Sayfa {page}: {products.Count} ürün kartı bulundu.");
 
@@ -148,8 +156,9 @@ public sealed class AmazonSearchService
 
         var smartQueue = smartQueueEngine.Build(orderedAccepted, SmartQueueEngine.DefaultQueueSize);
         await exporter.WriteSmartQueueAsync(smartQueuePath, smartQueue, cancellationToken);
-        await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, orderedAccepted, smartQueue, cancellationToken);
+        await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, failedPageCount, orderedAccepted, smartQueue, cancellationToken);
         logProgress?.Report($"Smart Queue hazır: {smartQueue.SelectedCount}/{smartQueue.RequestedCount} ürün | Beklenen net kâr: ${smartQueue.ExpectedNetProfit} | Ortalama Upload: {smartQueue.AverageUploadScore} | Ortalama Confidence: {smartQueue.AverageConfidenceScore}%");
+        logProgress?.Report($"Başarısız sayfa: {failedPageCount}");
         logProgress?.Report($"Smart Queue CSV: {smartQueuePath}");
         logProgress?.Report($"Özet rapor: {summaryPath}");
 
@@ -164,6 +173,40 @@ public sealed class AmazonSearchService
             smartQueue.ExpectedNetProfit,
             smartQueue.AverageUploadScore,
             smartQueue.AverageConfidenceScore);
+    }
+
+    private static async Task<string> FetchPageWithRetryAsync(
+        AmazonSearchClient client,
+        string keyword,
+        int page,
+        IProgress<string>? logProgress,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 2;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                return await client.FetchSearchPageAsync(keyword, page, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (attempt < maxAttempts)
+            {
+                logProgress?.Report($"WARN {keyword} | Sayfa {page}: {ex.Message}. Tekrar deneniyor...");
+                await Task.Delay(1500, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logProgress?.Report($"WARN {keyword} | Sayfa {page}: {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        return string.Empty;
     }
 
     private static IOrderedEnumerable<ProductResult> OrderForOutput(IEnumerable<ProductResult> products)
@@ -182,6 +225,7 @@ public sealed class AmazonSearchService
         int maxPages,
         int scannedCount,
         int skippedCount,
+        int failedPageCount,
         IReadOnlyList<ProductResult> acceptedProducts,
         SmartQueueResult smartQueue,
         CancellationToken cancellationToken)
@@ -200,6 +244,7 @@ public sealed class AmazonSearchService
         builder.AppendLine($"Scanned: {scannedCount}");
         builder.AppendLine($"Accepted: {acceptedProducts.Count}");
         builder.AppendLine($"Skipped: {skippedCount}");
+        builder.AppendLine($"Failed pages: {failedPageCount}");
         builder.AppendLine($"Smart Queue: {smartQueue.SelectedCount}/{smartQueue.RequestedCount}");
         builder.AppendLine($"Expected net profit: ${smartQueue.ExpectedNetProfit:0.00}");
         builder.AppendLine($"Average upload score: {smartQueue.AverageUploadScore:0.00}");
