@@ -118,7 +118,7 @@ public sealed class MainForm : Form
         _maxPriceNumeric.Minimum = 1; _maxPriceNumeric.Maximum = 1000; _maxPriceNumeric.Value = 98;
         _amazonChoiceCheckBox.Text = "Amazon Choice"; _amazonChoiceCheckBox.Checked = true;
         _lowStockCheckBox.Text = "Az stok ele"; _lowStockCheckBox.Checked = true;
-        _usuallyKeepCheckBox.Text = "Usually keep ele"; _usuallyKeepCheckBox.Checked = true;
+        _usuallyKeepCheckBox.Text = "Usually keep ele"; _usuallyKeepCheckBox.Checked = false;
         AddLabeledControl(panel, "Ekstra Arama", _keywordTextBox, 0, 0);
         AddLabeledControl(panel, "Sayfa", _pagesNumeric, 1, 0);
         AddLabeledControl(panel, "Paralel", _parallelNumeric, 2, 0);
@@ -281,7 +281,7 @@ public sealed class MainForm : Form
 
     private static string BuildDetailText(ProductResult p, bool isFavorite)
     {
-        var reasons = new List<string> { p.IsAmazonChoice ? "+ Amazon Choice" : "- Amazon Choice değil", p.HasLowStockWarning ? "- Stok az uyarısı var" : "+ Stok uyarısı yok", p.HasUsuallyKeepItemText ? "- Usually keep uyarısı var" : "+ Usually keep uyarısı yok", p.IsSponsored ? "- Sponsored sonuç" : "+ Organic sonuç", p.Price <= 60 ? "+ Amazon fiyatı iyi aralıkta" : "- Amazon fiyatı üst aralıkta", p.Rating >= 4.3m ? "+ Rating güçlü" : "- Rating zayıf veya okunamadı", p.ReviewCount >= 100 ? "+ Yorum sayısı güven veriyor" : "- Yorum sayısı düşük veya okunamadı", p.CompetitionScore <= 45 ? "+ Rekabet düşük/orta" : "- Rekabet yüksek olabilir", p.ImageCount >= 4 ? "+ Görsel seti yeterli" : "- Görsel sayısı eksik", p.VisualRiskLevel == "LOW" ? "+ Görsel risk düşük" : "- Görsel kontrol gerekli", p.UploadScore >= 88 ? "+ Upload Score güçlü" : "- Upload Score izleme gerektiriyor", p.ProfitDecision == "Profitable" ? "+ eBay kâr hedefini karşılıyor" : "- eBay kârı düşük" };
+        var reasons = new List<string> { p.IsAmazonChoice ? "+ Amazon Choice" : "- Amazon Choice değil", p.HasLowStockWarning ? "- Stok az uyarısı var" : "+ Stok uyarısı yok", p.HasUsuallyKeepItemText ? "+ Usually keep bilgisi var" : "+ Usually keep bilgisi yok", p.IsSponsored ? "- Sponsored sonuç" : "+ Organic sonuç", p.Price <= 60 ? "+ Amazon fiyatı iyi aralıkta" : "- Amazon fiyatı üst aralıkta", p.Rating >= 4.3m ? "+ Rating güçlü" : "- Rating zayıf veya okunamadı", p.ReviewCount >= 100 ? "+ Yorum sayısı güven veriyor" : "- Yorum sayısı düşük veya okunamadı", p.CompetitionScore <= 45 ? "+ Rekabet düşük/orta" : "- Rekabet yüksek olabilir", p.ImageCount >= 4 ? "+ Görsel seti yeterli" : "- Görsel sayısı eksik", p.VisualRiskLevel == "LOW" ? "+ Görsel risk düşük" : "- Görsel kontrol gerekli", p.UploadScore >= 88 ? "+ Upload Score güçlü" : "- Upload Score izleme gerektiriyor", p.ProfitDecision == "Profitable" ? "+ eBay kâr hedefini karşılıyor" : "- eBay kârı düşük" };
         return $"Favorite: {(isFavorite ? "YES ⭐" : "NO")}{Environment.NewLine}" +
                $"UPLOAD DECISION: {p.UploadDecision}{Environment.NewLine}Upload Score: {p.UploadScore}/100 | Competition: {p.CompetitionScore}/100{Environment.NewLine}" +
                $"Visual Risk: {p.VisualRiskLevel} | Images: {p.ImageCount}/6 | {p.VisualRiskNotes}{Environment.NewLine}" +
