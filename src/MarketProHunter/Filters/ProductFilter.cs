@@ -30,6 +30,11 @@ public sealed class ProductFilter
             return FilterDecision.Reject("Amazon Choice değil");
         }
 
+        if (_settings.ExcludeSponsored && product.IsSponsored)
+        {
+            return FilterDecision.Reject("Sponsored sonuç");
+        }
+
         if (_settings.ExcludeLowStock && product.HasLowStockWarning)
         {
             return FilterDecision.Reject("Stok az uyarısı var");
