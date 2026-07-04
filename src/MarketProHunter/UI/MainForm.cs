@@ -231,7 +231,7 @@ public sealed class MainForm : Form
             var category = _categories.FirstOrDefault(x => x.Name.Equals(item.ToString(), StringComparison.OrdinalIgnoreCase));
             if (category is not null) keywords.AddRange(category.Keywords);
         }
-        if (!string.IsNullOrWhiteSpace(_keywordTextBox.Text)) keywords.AddRange(_keywordTextBox.Text.Split(new[] { ',', ';', Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        if (!string.IsNullOrWhiteSpace(_keywordTextBox.Text)) keywords.AddRange(_keywordTextBox.Text.Split(new[] { ",", ";", Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         return keywords.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
