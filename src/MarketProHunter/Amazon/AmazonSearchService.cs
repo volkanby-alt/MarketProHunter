@@ -56,6 +56,7 @@ public sealed class AmazonSearchService
         var accepted = new ConcurrentBag<ProductResult>();
         var acceptedAsins = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         var scannedCount = 0;
+        var acceptedCount = 0;
         var skippedCount = 0;
         var maxParallel = Math.Clamp(settings.MaxParallelSearches, 1, 8);
 
@@ -81,7 +82,7 @@ public sealed class AmazonSearchService
                 foreach (var product in products)
                 {
                     token.ThrowIfCancellationRequested();
-                    Interlocked.Increment(ref scannedCount);
+                    var currentScanned = Interlocked.Increment(ref scannedCount);
                     var decision = productFilter.Evaluate(product);
 
                     if (decision.Accepted && acceptedAsins.TryAdd(product.Asin, 0))
@@ -117,6 +118,7 @@ public sealed class AmazonSearchService
                         };
 
                         accepted.Add(acceptedProduct);
+                        Interlocked.Increment(ref acceptedCount);
                         acceptedProgress?.Report(acceptedProduct);
                         logProgress?.Report($"OK  {product.Asin} | {score.UploadDecision} | Upload {score.UploadScore} | Risk {opportunity.RiskLevel} | {opportunity.SweetSpot} | Net ${profit.NetProfit}");
                     }
@@ -125,6 +127,11 @@ public sealed class AmazonSearchService
                         Interlocked.Increment(ref skippedCount);
                         var reason = decision.Accepted ? "Tekrar eden ASIN" : decision.Reason;
                         logProgress?.Report($"SKIP {product.Asin} | {reason}");
+                    }
+
+                    if (currentScanned % 25 == 0)
+                    {
+                        logProgress?.Report($"İlerleme: {currentScanned} tarandı | {Volatile.Read(ref acceptedCount)} kabul | {Volatile.Read(ref skippedCount)} elendi");
                     }
                 }
 
