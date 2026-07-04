@@ -39,8 +39,8 @@ public sealed class SmartQueueEngine
             queueSize,
             selected.Count,
             selected.Sum(x => x.Product.NetProfit),
-            selected.Count == 0 ? 0 : Math.Round(selected.Average(x => x.Product.UploadScore), 2),
-            selected.Count == 0 ? 0 : Math.Round(selected.Average(x => x.Product.ConfidenceScore), 2),
+            selected.Count == 0 ? 0m : Math.Round(selected.Average(x => (decimal)x.Product.UploadScore), 2),
+            selected.Count == 0 ? 0m : Math.Round(selected.Average(x => (decimal)x.Product.ConfidenceScore), 2),
             selected);
     }
 
