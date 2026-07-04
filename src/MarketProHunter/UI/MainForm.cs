@@ -221,10 +221,12 @@ public sealed class MainForm : Form
         {
             var result = await service.RunManyAsync(keywords, (int)_pagesNumeric.Value, settings, profitSettings, logProgress, productProgress, _cancellationTokenSource.Token);
             _runTimer?.Stop();
-            _statusLabel.Text = $"Bitti: {result.AcceptedCount} uygun ürün | Süre: {FormatElapsed()}"; AppendLog($"CSV dosyası: {result.OutputPath}");
+            var failedText = result.FailedPageCount > 0 ? $" | Hatalı sayfa: {result.FailedPageCount}" : string.Empty;
+            _statusLabel.Text = $"Bitti: {result.AcceptedCount} uygun ürün | Süre: {FormatElapsed()}{failedText}"; AppendLog($"CSV dosyası: {result.OutputPath}");
+            if (result.FailedPageCount > 0) AppendLog($"Hatalı sayfa sayısı: {result.FailedPageCount}");
             if (!string.IsNullOrWhiteSpace(result.SmartQueuePath)) AppendLog($"Smart Queue CSV: {result.SmartQueuePath}");
             if (!string.IsNullOrWhiteSpace(result.SummaryPath)) AppendLog($"Özet rapor: {result.SummaryPath}");
-            MessageBox.Show($"Tarama bitti. Uygun ürün: {result.AcceptedCount}\nSüre: {FormatElapsed()}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"Tarama bitti. Uygun ürün: {result.AcceptedCount}\nSüre: {FormatElapsed()}\nHatalı sayfa: {result.FailedPageCount}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException) { _runTimer?.Stop(); _statusLabel.Text = $"Durduruldu | Süre: {FormatElapsed()}"; AppendLog("Tarama kullanıcı tarafından durduruldu."); }
         catch (Exception ex) { _runTimer?.Stop(); _statusLabel.Text = "Hata"; AppendLog("HATA: " + ex.Message); MessageBox.Show(ex.Message, "MarketProHunter Hata", MessageBoxButtons.OK, MessageBoxIcon.Error); }
