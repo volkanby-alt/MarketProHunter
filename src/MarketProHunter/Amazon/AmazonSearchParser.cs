@@ -183,7 +183,7 @@ public sealed partial class AmazonSearchParser
         var url = WebUtility.HtmlDecode(rawUrl).Trim();
         if (string.IsNullOrWhiteSpace(url)) return;
         if (!url.Contains("media-amazon", StringComparison.OrdinalIgnoreCase) && !url.Contains("ssl-images-amazon", StringComparison.OrdinalIgnoreCase)) return;
-        url = Regex.Replace(url, "\._[^.]+_\.", ".");
+        url = Regex.Replace(url, @"\._[^.]+_\.", ".");
         if (!urls.Contains(url, StringComparer.OrdinalIgnoreCase)) urls.Add(url);
     }
 
