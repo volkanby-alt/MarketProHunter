@@ -1,0 +1,36 @@
+name: Windows Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore MarketProHunter.sln
+
+      - name: Build
+        run: dotnet build MarketProHunter.sln --configuration Release --no-restore
+
+      - name: Publish single-folder Windows app
+        run: dotnet publish src/MarketProHunter/MarketProHunter.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishReadyToRun=false --output publish/MarketProHunter
+
+      - name: Upload EXE package
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarketProHunter-win-x64
+          path: publish/MarketProHunter
