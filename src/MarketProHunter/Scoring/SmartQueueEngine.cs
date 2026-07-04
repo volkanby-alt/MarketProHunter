@@ -25,11 +25,10 @@ public sealed class SmartQueueEngine
 
         var selected = products
             .Where(IsQueueCandidate)
-            .OrderByDescending(p => p.UploadDecision.Equals("UPLOAD NOW", StringComparison.OrdinalIgnoreCase))
-            .ThenByDescending(p => p.UploadScore)
-            .ThenByDescending(p => p.ConfidenceScore)
+            .OrderByDescending(p => p.UploadScore)
             .ThenByDescending(p => p.NetProfit)
             .ThenBy(p => p.CompetitionScore)
+            .ThenByDescending(p => p.ConfidenceScore)
             .ThenByDescending(p => p.ImageCount)
             .Take(queueSize)
             .Select((product, index) => new SmartQueueItem(index + 1, TierFor(index + 1, product), product))
