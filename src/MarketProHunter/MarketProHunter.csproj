@@ -7,6 +7,13 @@
     <Nullable>enable</Nullable>
     <AssemblyName>MarketProHunter</AssemblyName>
     <RootNamespace>MarketProHunter</RootNamespace>
+    <Version>1.0.0-preview</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Authors>Volkan Bay</Authors>
+    <Product>MarketProHunter</Product>
+    <Description>Amazon to eBay product research, scoring, Smart Queue, CSV and Excel export tool.</Description>
+    <Company>MarketProHunter</Company>
   </PropertyGroup>
 
   <ItemGroup>
