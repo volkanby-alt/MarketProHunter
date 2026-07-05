@@ -7,9 +7,9 @@ public sealed record SearchRunResult(
     string OutputPath,
     string SmartQueuePath = "",
     string SummaryPath = "",
-    string ExcelPath = "",
     int SmartQueueCount = 0,
     decimal SmartQueueExpectedNetProfit = 0,
     decimal SmartQueueAverageUploadScore = 0,
     decimal SmartQueueAverageConfidenceScore = 0,
-    int FailedPageCount = 0);
+    int FailedPageCount = 0,
+    string ExcelPath = "");
