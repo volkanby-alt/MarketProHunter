@@ -50,6 +50,8 @@ public sealed class AmazonSearchService
         var productFilter = new ProductFilter(settings, veroFilter);
         var scoringEngine = new ScoringEngine();
         var listingQualityAnalyzer = new ListingQualityAnalyzer();
+        var productPageParser = new AmazonProductPageParser();
+        var productPageQualityAnalyzer = new ProductPageQualityAnalyzer();
         var opportunityAnalyzer = new OpportunityAnalyzer();
         var smartQueueEngine = new SmartQueueEngine();
         var profitEngine = new EbayProfitEngine();
@@ -60,6 +62,7 @@ public sealed class AmazonSearchService
         var acceptedCount = 0;
         var skippedCount = 0;
         var failedPageCount = 0;
+        var failedProductPageCount = 0;
         var maxParallel = Math.Clamp(settings.MaxParallelSearches, 1, 8);
 
         logProgress?.Report($"Paralel tarama başlıyor. Anahtar kelime: {keywordList.Count}, paralel görev: {maxParallel}");
@@ -113,12 +116,26 @@ public sealed class AmazonSearchService
                     {
                         var score = scoringEngine.Score(product);
                         var quality = listingQualityAnalyzer.Analyze(product);
+                        var pageData = await FetchAndParseProductPageAsync(client, productPageParser, product, logProgress, token);
+                        if (pageData.BulletPointCount == 0 && pageData.SpecificationCount == 0 && string.IsNullOrWhiteSpace(pageData.Description))
+                        {
+                            Interlocked.Increment(ref failedProductPageCount);
+                        }
+
+                        var pageQuality = productPageQualityAnalyzer.Analyze(pageData);
                         var profit = profitEngine.Calculate(product, profitSettings);
                         var enrichedProduct = product with
                         {
                             TitleQualityScore = quality.TitleQualityScore,
                             ImageQualityScore = quality.ImageQualityScore,
                             ContentQualityScore = quality.ContentQualityScore,
+                            BulletPointCount = pageData.BulletPointCount,
+                            SpecificationCount = pageData.SpecificationCount,
+                            BulletPointQualityScore = pageQuality.BulletPointQualityScore,
+                            DescriptionQualityScore = pageQuality.DescriptionQualityScore,
+                            SpecificationQualityScore = pageQuality.SpecificationQualityScore,
+                            HasAPlusContent = pageData.HasAPlusContent,
+                            ProductPageQualityNotes = pageQuality.Notes,
                             ListingQualityNotes = quality.Notes,
                             SafetyScore = score.SafetyScore,
                             SalesScore = score.SalesScore,
@@ -149,7 +166,7 @@ public sealed class AmazonSearchService
                         accepted.Add(acceptedProduct);
                         Interlocked.Increment(ref acceptedCount);
                         acceptedProgress?.Report(acceptedProduct);
-                        logProgress?.Report($"OK  {product.Asin} | {score.UploadDecision} | Upload {score.UploadScore} | Title {quality.TitleQualityScore} | Img {quality.ImageQualityScore} | Content {quality.ContentQualityScore} | Net ${profit.NetProfit}");
+                        logProgress?.Report($"OK  {product.Asin} | {score.UploadDecision} | Upload {score.UploadScore} | Title {quality.TitleQualityScore} | Img {quality.ImageQualityScore} | Bullets {pageData.BulletPointCount} | Specs {pageData.SpecificationCount} | Net ${profit.NetProfit}");
                     }
                     else
                     {
@@ -171,16 +188,17 @@ public sealed class AmazonSearchService
         var orderedAccepted = OrderForOutput(accepted).ToList();
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         var outputPath = Path.Combine(AppContext.BaseDirectory, "output", $"amazon_results_{timestamp}.csv");
-        var smartQueuePath = Path.Combine(AppContext.BaseDirectory, "output", $"smart_queue_top50_{timestamp}.csv");
+        var smartQueuePath = Path.Combine(AppContext.BaseDirectory, "output", $"smart_queue_top200_{timestamp}.csv");
         var summaryPath = Path.Combine(AppContext.BaseDirectory, "output", $"run_summary_{timestamp}.txt");
         await exporter.WriteAsync(outputPath, orderedAccepted, cancellationToken);
 
         var smartQueue = smartQueueEngine.Build(orderedAccepted, SmartQueueEngine.DefaultQueueSize);
         await exporter.WriteSmartQueueAsync(smartQueuePath, smartQueue, cancellationToken);
-        await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, failedPageCount, orderedAccepted, smartQueue, cancellationToken);
-        logProgress?.Report($"Smart Queue hazır: {smartQueue.SelectedCount}/{smartQueue.RequestedCount} ürün | Beklenen net kâr: ${smartQueue.ExpectedNetProfit} | Ortalama Upload: {smartQueue.AverageUploadScore} | Ortalama Confidence: {smartQueue.AverageConfidenceScore}%");
+        await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, failedPageCount, failedProductPageCount, orderedAccepted, smartQueue, cancellationToken);
+        logProgress?.Report($"Smart Queue hazır: {smartQueue.SelectedCount}/{smartQueue.RequestedCount} ürün | Beklenen net kâr: ${smartQueue.ExpectedNetProfit} | Ortalama Upload: {smartQueue.AverageUploadScore} | Ortalama Confidence: {smartQueue.AverageConfidenceScore}% | Ortalama Quality: {smartQueue.AverageListingQualityScore}");
         logProgress?.Report($"Kabul oranı: {CalculateAcceptanceRate(orderedAccepted.Count, scannedCount):0.00}%");
         logProgress?.Report($"Başarısız sayfa: {failedPageCount}");
+        logProgress?.Report($"Detay sayfası zayıf/alınamadı: {failedProductPageCount}");
         logProgress?.Report($"Smart Queue CSV: {smartQueuePath}");
         logProgress?.Report($"Özet rapor: {summaryPath}");
 
@@ -232,11 +250,42 @@ public sealed class AmazonSearchService
         return string.Empty;
     }
 
+    private static async Task<AmazonProductPageData> FetchAndParseProductPageAsync(
+        AmazonSearchClient client,
+        AmazonProductPageParser parser,
+        ProductResult product,
+        IProgress<string>? logProgress,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(product.ProductUrl))
+        {
+            return new AmazonProductPageData(product.Asin, Array.Empty<string>(), string.Empty, new Dictionary<string, string>(), false);
+        }
+
+        try
+        {
+            var html = await client.FetchProductPageAsync(product.ProductUrl, cancellationToken);
+            return parser.Parse(html, product.Asin);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logProgress?.Report($"WARN {product.Asin} | Detay sayfası okunamadı: {ex.Message}");
+            return new AmazonProductPageData(product.Asin, Array.Empty<string>(), string.Empty, new Dictionary<string, string>(), false);
+        }
+    }
+
     private static IOrderedEnumerable<ProductResult> OrderForOutput(IEnumerable<ProductResult> products)
     {
         return products
             .OrderByDescending(p => p.UploadScore)
             .ThenByDescending(p => p.NetProfit)
+            .ThenByDescending(p => p.BulletPointQualityScore)
+            .ThenByDescending(p => p.DescriptionQualityScore)
+            .ThenByDescending(p => p.SpecificationQualityScore)
             .ThenByDescending(p => p.ContentQualityScore)
             .ThenByDescending(p => p.TitleQualityScore)
             .ThenByDescending(p => p.ImageQualityScore)
@@ -265,6 +314,7 @@ public sealed class AmazonSearchService
         int scannedCount,
         int skippedCount,
         int failedPageCount,
+        int failedProductPageCount,
         IReadOnlyList<ProductResult> acceptedProducts,
         SmartQueueResult smartQueue,
         CancellationToken cancellationToken)
@@ -285,10 +335,12 @@ public sealed class AmazonSearchService
         builder.AppendLine($"Skipped: {skippedCount}");
         builder.AppendLine($"Acceptance rate: {CalculateAcceptanceRate(acceptedProducts.Count, scannedCount):0.00}%");
         builder.AppendLine($"Failed pages: {failedPageCount}");
+        builder.AppendLine($"Weak or failed product pages: {failedProductPageCount}");
         builder.AppendLine($"Smart Queue: {smartQueue.SelectedCount}/{smartQueue.RequestedCount}");
         builder.AppendLine($"Expected net profit: ${smartQueue.ExpectedNetProfit:0.00}");
         builder.AppendLine($"Average upload score: {smartQueue.AverageUploadScore:0.00}");
         builder.AppendLine($"Average confidence: {smartQueue.AverageConfidenceScore:0.00}%");
+        builder.AppendLine($"Average listing quality: {smartQueue.AverageListingQualityScore:0.00}");
         builder.AppendLine();
         builder.AppendLine("Top 10 Smart Queue Products");
         builder.AppendLine("---------------------------");
@@ -296,10 +348,11 @@ public sealed class AmazonSearchService
         foreach (var item in smartQueue.Items.Take(10))
         {
             var p = item.Product;
-            builder.AppendLine($"#{item.Rank} {item.Tier} | {p.Asin} | Upload {p.UploadScore} | Title {p.TitleQualityScore} | Images {p.ImageQualityScore} | Content {p.ContentQualityScore} | Net ${p.NetProfit:0.00}");
+            builder.AppendLine($"#{item.Rank} {item.Tier} | {p.Asin} | Upload {p.UploadScore} | Title {p.TitleQualityScore} | Images {p.ImageQualityScore} | Bullets {p.BulletPointQualityScore} | Desc {p.DescriptionQualityScore} | Specs {p.SpecificationQualityScore} | Net ${p.NetProfit:0.00}");
             builder.AppendLine($"Brand: {p.Brand}");
             builder.AppendLine($"Title: {Shorten(p.Title)}");
             builder.AppendLine($"Quality: {p.ListingQualityNotes}");
+            builder.AppendLine($"Page: {p.ProductPageQualityNotes}");
             builder.AppendLine($"Why: {p.OpportunitySummary}");
             builder.AppendLine();
         }
