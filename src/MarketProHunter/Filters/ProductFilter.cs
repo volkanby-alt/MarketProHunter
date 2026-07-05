@@ -71,16 +71,29 @@ public sealed class ProductFilter
             "eGift card",
             "digital code",
             "download code",
+            "downloadable",
+            "ebook",
+            "e-book",
+            "pdf",
             "subscription",
+            "membership",
             "renewed",
             "refurbished",
+            "pre-owned",
+            "preowned",
             "used",
             "open box",
             "replacement plan",
             "protection plan",
             "warranty",
             "bundle only",
-            "parts only"
+            "parts only",
+            "not for sale",
+            "sample size",
+            "trial size",
+            "tester",
+            "empty box",
+            "box only"
         };
 
         return blockedTerms.Any(term => title.Contains(term, StringComparison.OrdinalIgnoreCase));
