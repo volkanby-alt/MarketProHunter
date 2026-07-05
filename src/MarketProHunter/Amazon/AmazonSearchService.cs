@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Threading;
+using MarketProHunter.Deduplication;
 using MarketProHunter.Export;
 using MarketProHunter.Filters;
 using MarketProHunter.Models;
@@ -187,6 +188,8 @@ public sealed class AmazonSearchService
         });
 
         var orderedAccepted = OrderForOutput(accepted).ToList();
+        var duplicateSafeAccepted = DuplicateKeyBuilder.KeepBestCandidates(orderedAccepted).ToList();
+        var duplicateRemovedCount = orderedAccepted.Count - duplicateSafeAccepted.Count;
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         var outputPath = Path.Combine(AppContext.BaseDirectory, "output", $"amazon_results_{timestamp}.csv");
         var smartQueuePath = Path.Combine(AppContext.BaseDirectory, "output", $"smart_queue_top200_{timestamp}.csv");
@@ -194,10 +197,11 @@ public sealed class AmazonSearchService
         var summaryPath = Path.Combine(AppContext.BaseDirectory, "output", $"run_summary_{timestamp}.txt");
         await exporter.WriteAsync(outputPath, orderedAccepted, cancellationToken);
 
-        var smartQueue = smartQueueEngine.Build(orderedAccepted, SmartQueueEngine.DefaultQueueSize);
+        var smartQueue = smartQueueEngine.Build(duplicateSafeAccepted, SmartQueueEngine.DefaultQueueSize);
         await exporter.WriteSmartQueueAsync(smartQueuePath, smartQueue, cancellationToken);
         await excelExporter.WriteWorkbookAsync(excelPath, orderedAccepted, smartQueue, cancellationToken);
-        await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, failedPageCount, failedProductPageCount, orderedAccepted, smartQueue, cancellationToken);
+        await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, failedPageCount, failedProductPageCount, orderedAccepted, smartQueue, duplicateRemovedCount, cancellationToken);
+        logProgress?.Report($"Duplicate Killer: {duplicateRemovedCount} varyasyon/tekrar Smart Queue dışına alındı.");
         logProgress?.Report($"Smart Queue hazır: {smartQueue.SelectedCount}/{smartQueue.RequestedCount} ürün | Beklenen net kâr: ${smartQueue.ExpectedNetProfit} | Ortalama Upload: {smartQueue.AverageUploadScore} | Ortalama Confidence: {smartQueue.AverageConfidenceScore}% | Ortalama Quality: {smartQueue.AverageListingQualityScore}");
         logProgress?.Report($"Kabul oranı: {CalculateAcceptanceRate(orderedAccepted.Count, scannedCount):0.00}%");
         logProgress?.Report($"Başarısız sayfa: {failedPageCount}");
@@ -322,6 +326,7 @@ public sealed class AmazonSearchService
         int failedProductPageCount,
         IReadOnlyList<ProductResult> acceptedProducts,
         SmartQueueResult smartQueue,
+        int duplicateRemovedCount,
         CancellationToken cancellationToken)
     {
         var directory = Path.GetDirectoryName(path);
@@ -341,6 +346,7 @@ public sealed class AmazonSearchService
         builder.AppendLine($"Acceptance rate: {CalculateAcceptanceRate(acceptedProducts.Count, scannedCount):0.00}%");
         builder.AppendLine($"Failed pages: {failedPageCount}");
         builder.AppendLine($"Weak or failed product pages: {failedProductPageCount}");
+        builder.AppendLine($"Duplicate Killer removed from Smart Queue: {duplicateRemovedCount}");
         builder.AppendLine($"Smart Queue: {smartQueue.SelectedCount}/{smartQueue.RequestedCount}");
         builder.AppendLine($"Expected net profit: ${smartQueue.ExpectedNetProfit:0.00}");
         builder.AppendLine($"Average upload score: {smartQueue.AverageUploadScore:0.00}");
