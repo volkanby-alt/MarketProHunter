@@ -33,8 +33,24 @@ public sealed class AmazonSearchClient : IDisposable
         var max = Math.Max(min, (int)(_settings.MaxPrice * 100));
         var url = $"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/s?k={encodedKeyword}&page={page}&rh=p_36%3A{min}-{max}&language=en_US&currency=USD";
 
+        return await FetchDocumentAsync(url, _settings.MarketplaceBaseUrl, cancellationToken);
+    }
+
+    public async Task<string> FetchProductPageAsync(string productUrl, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(productUrl)) return string.Empty;
+
+        var url = productUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? productUrl
+            : $"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/{productUrl.TrimStart('/')}";
+
+        return await FetchDocumentAsync(url, _settings.MarketplaceBaseUrl, cancellationToken);
+    }
+
+    private async Task<string> FetchDocumentAsync(string url, string referrer, CancellationToken cancellationToken)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Referrer = new Uri(_settings.MarketplaceBaseUrl);
+        request.Headers.Referrer = new Uri(referrer);
         request.Headers.TryAddWithoutValidation("Cookie", BuildCookie());
 
         var response = await _httpClient.SendAsync(request, cancellationToken);
