@@ -57,6 +57,14 @@ tools\smoke-test.bat
 
 This checks that the app builds, publishes, and includes the required VeRO config file.
 
+## Open generated reports
+
+After a scan, you can quickly open the report folder with:
+
+```text
+tools\open-output.bat
+```
+
 ## Clean old generated reports
 
 To remove old generated scan files, run:
