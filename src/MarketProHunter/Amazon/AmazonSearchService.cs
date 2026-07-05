@@ -49,6 +49,7 @@ public sealed class AmazonSearchService
         var veroFilter = new VeroBrandFilter("config/vero-brands.txt");
         var productFilter = new ProductFilter(settings, veroFilter);
         var scoringEngine = new ScoringEngine();
+        var listingQualityAnalyzer = new ListingQualityAnalyzer();
         var opportunityAnalyzer = new OpportunityAnalyzer();
         var smartQueueEngine = new SmartQueueEngine();
         var profitEngine = new EbayProfitEngine();
@@ -111,9 +112,14 @@ public sealed class AmazonSearchService
                     if (decision.Accepted && acceptedAsins.TryAdd(product.Asin, 0))
                     {
                         var score = scoringEngine.Score(product);
+                        var quality = listingQualityAnalyzer.Analyze(product);
                         var profit = profitEngine.Calculate(product, profitSettings);
                         var enrichedProduct = product with
                         {
+                            TitleQualityScore = quality.TitleQualityScore,
+                            ImageQualityScore = quality.ImageQualityScore,
+                            ContentQualityScore = quality.ContentQualityScore,
+                            ListingQualityNotes = quality.Notes,
                             SafetyScore = score.SafetyScore,
                             SalesScore = score.SalesScore,
                             ProfitScore = score.ProfitScore,
@@ -143,7 +149,7 @@ public sealed class AmazonSearchService
                         accepted.Add(acceptedProduct);
                         Interlocked.Increment(ref acceptedCount);
                         acceptedProgress?.Report(acceptedProduct);
-                        logProgress?.Report($"OK  {product.Asin} | {score.UploadDecision} | Upload {score.UploadScore} | Risk {opportunity.RiskLevel} | {opportunity.SweetSpot} | Net ${profit.NetProfit}");
+                        logProgress?.Report($"OK  {product.Asin} | {score.UploadDecision} | Upload {score.UploadScore} | Title {quality.TitleQualityScore} | Img {quality.ImageQualityScore} | Content {quality.ContentQualityScore} | Net ${profit.NetProfit}");
                     }
                     else
                     {
@@ -231,6 +237,9 @@ public sealed class AmazonSearchService
         return products
             .OrderByDescending(p => p.UploadScore)
             .ThenByDescending(p => p.NetProfit)
+            .ThenByDescending(p => p.ContentQualityScore)
+            .ThenByDescending(p => p.TitleQualityScore)
+            .ThenByDescending(p => p.ImageQualityScore)
             .ThenBy(p => p.CompetitionScore)
             .ThenByDescending(p => p.ConfidenceScore)
             .ThenByDescending(p => p.ImageCount);
@@ -287,9 +296,10 @@ public sealed class AmazonSearchService
         foreach (var item in smartQueue.Items.Take(10))
         {
             var p = item.Product;
-            builder.AppendLine($"#{item.Rank} {item.Tier} | {p.Asin} | Upload {p.UploadScore} | Risk {p.RiskLevel} | Net ${p.NetProfit:0.00}");
+            builder.AppendLine($"#{item.Rank} {item.Tier} | {p.Asin} | Upload {p.UploadScore} | Title {p.TitleQualityScore} | Images {p.ImageQualityScore} | Content {p.ContentQualityScore} | Net ${p.NetProfit:0.00}");
             builder.AppendLine($"Brand: {p.Brand}");
             builder.AppendLine($"Title: {Shorten(p.Title)}");
+            builder.AppendLine($"Quality: {p.ListingQualityNotes}");
             builder.AppendLine($"Why: {p.OpportunitySummary}");
             builder.AppendLine();
         }
