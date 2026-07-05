@@ -18,17 +18,20 @@ public sealed record SmartQueueResult(
 
 public sealed class SmartQueueEngine
 {
-    public const int DefaultQueueSize = 50;
+    public const int DefaultQueueSize = 200;
 
     public SmartQueueResult Build(IEnumerable<ProductResult> products, int queueSize = DefaultQueueSize)
     {
-        queueSize = Math.Clamp(queueSize, 1, 200);
+        queueSize = Math.Clamp(queueSize, 1, 300);
 
         var selected = products
             .Where(IsQueueCandidate)
             .OrderByDescending(p => p.UploadScore)
             .ThenByDescending(p => p.NetProfit)
             .ThenByDescending(p => AverageListingQuality(p))
+            .ThenByDescending(p => p.BulletPointQualityScore)
+            .ThenByDescending(p => p.DescriptionQualityScore)
+            .ThenByDescending(p => p.SpecificationQualityScore)
             .ThenByDescending(p => p.ContentQualityScore)
             .ThenByDescending(p => p.TitleQualityScore)
             .ThenByDescending(p => p.ImageQualityScore)
@@ -64,14 +67,14 @@ public sealed class SmartQueueEngine
     private static string TierFor(int rank, ProductResult product)
     {
         var quality = AverageListingQuality(product);
-        if (rank <= 10 && product.UploadScore >= 94 && product.ConfidenceScore >= 90 && quality >= 85 && product.VisualRiskLevel == "LOW") return "Platinum";
-        if (rank <= 25 && product.UploadScore >= 88 && quality >= 75) return "Gold";
-        if (rank <= 40 && product.UploadScore >= 74) return "Silver";
+        if (rank <= 20 && product.UploadScore >= 94 && product.ConfidenceScore >= 90 && quality >= 85 && product.VisualRiskLevel == "LOW") return "Platinum";
+        if (rank <= 80 && product.UploadScore >= 88 && quality >= 75) return "Gold";
+        if (rank <= 150 && product.UploadScore >= 74) return "Silver";
         return "Bronze";
     }
 
     private static decimal AverageListingQuality(ProductResult product)
     {
-        return Math.Round((product.TitleQualityScore + product.ImageQualityScore + product.ContentQualityScore) / 3m, 2);
+        return Math.Round((product.TitleQualityScore + product.ImageQualityScore + product.ContentQualityScore + product.BulletPointQualityScore + product.DescriptionQualityScore + product.SpecificationQualityScore) / 6m, 2);
     }
 }
