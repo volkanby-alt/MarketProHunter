@@ -47,6 +47,26 @@ tools\run-release.bat
 publish\MarketProHunter\MarketProHunter.exe
 ```
 
+## Local smoke test
+
+Before using a local build, you can run:
+
+```text
+tools\smoke-test.bat
+```
+
+This checks that the app builds, publishes, and includes the required VeRO config file.
+
+## Clean old generated reports
+
+To remove old generated scan files, run:
+
+```text
+tools\clean-output.bat
+```
+
+This removes generated `output` folders only. It does not remove source code.
+
 ## Recommended first settings
 
 Use these first so the scan stays controlled:
