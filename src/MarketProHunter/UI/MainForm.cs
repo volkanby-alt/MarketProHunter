@@ -200,7 +200,7 @@ public sealed class MainForm : Form
         _resultsGrid.Dock = DockStyle.Fill; _resultsGrid.ReadOnly = true; _resultsGrid.AllowUserToAddRows = false; _resultsGrid.AllowUserToDeleteRows = false;
         _resultsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; _resultsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _resultsGrid.SelectionChanged += (_, _) => ShowSelectedProductDetails();
-        _resultsGrid.Columns.Add("fav", "Fav"); _resultsGrid.Columns.Add("uploadScore", "Upload"); _resultsGrid.Columns.Add("uploadDecision", "Decision"); _resultsGrid.Columns.Add("visualRisk", "Visual"); _resultsGrid.Columns.Add("imageCount", "Imgs"); _resultsGrid.Columns.Add("competition", "Comp"); _resultsGrid.Columns.Add("confidence", "Conf %"); _resultsGrid.Columns.Add("overall", "Overall"); _resultsGrid.Columns.Add("rec", "Rec");
+        _resultsGrid.Columns.Add("fav", "Fav"); _resultsGrid.Columns.Add("uploadScore", "Upload"); _resultsGrid.Columns.Add("uploadDecision", "Decision"); _resultsGrid.Columns.Add("titleQ", "TitleQ"); _resultsGrid.Columns.Add("imageQ", "ImageQ"); _resultsGrid.Columns.Add("contentQ", "ContentQ"); _resultsGrid.Columns.Add("visualRisk", "Visual"); _resultsGrid.Columns.Add("imageCount", "Imgs"); _resultsGrid.Columns.Add("competition", "Comp"); _resultsGrid.Columns.Add("confidence", "Conf %"); _resultsGrid.Columns.Add("overall", "Overall"); _resultsGrid.Columns.Add("rec", "Rec");
         _resultsGrid.Columns.Add("sell", "eBay Sell"); _resultsGrid.Columns.Add("net", "Net $"); _resultsGrid.Columns.Add("margin", "Margin %"); _resultsGrid.Columns.Add("profitDecision", "Profit");
         _resultsGrid.Columns.Add("rating", "Rating"); _resultsGrid.Columns.Add("reviews", "Reviews"); _resultsGrid.Columns.Add("stars", "Stars"); _resultsGrid.Columns.Add("safety", "Safety"); _resultsGrid.Columns.Add("sales", "Sales"); _resultsGrid.Columns.Add("profitScore", "ProfitScore");
         _resultsGrid.Columns.Add("asin", "ASIN"); _resultsGrid.Columns.Add("title", "Title"); _resultsGrid.Columns.Add("brand", "Brand"); _resultsGrid.Columns.Add("price", "Amazon $"); _resultsGrid.Columns.Add("keyword", "Keyword"); _resultsGrid.Columns.Add("url", "URL");
@@ -260,7 +260,7 @@ public sealed class MainForm : Form
     private void RefreshGrid()
     {
         _resultsGrid.Rows.Clear();
-        foreach (var p in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.UploadScore).ThenByDescending(p => p.NetProfit).ThenBy(p => p.CompetitionScore).ThenByDescending(p => p.ConfidenceScore).ThenByDescending(p => p.ImageCount)) AddProductRowToGrid(p);
+        foreach (var p in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.UploadScore).ThenByDescending(p => p.NetProfit).ThenByDescending(p => p.ContentQualityScore).ThenByDescending(p => p.TitleQualityScore).ThenByDescending(p => p.ImageQualityScore).ThenBy(p => p.CompetitionScore).ThenByDescending(p => p.ConfidenceScore).ThenByDescending(p => p.ImageCount)) AddProductRowToGrid(p);
         UpdateLiveStatus();
     }
 
@@ -281,7 +281,7 @@ public sealed class MainForm : Form
 
     private void AddProductRowToGrid(ProductResult product)
     {
-        var index = _resultsGrid.Rows.Add(_decisionStore.IsFavorite(product.Asin) ? "⭐" : "", product.UploadScore, product.UploadDecision, product.VisualRiskLevel, product.ImageCount, product.CompetitionScore, product.ConfidenceScore, product.OverallScore, product.Recommendation, $"${product.RecommendedSalePrice}", $"${product.NetProfit}", product.NetMarginPercent, product.ProfitDecision, product.Rating, product.ReviewCount, product.Stars, product.SafetyScore, product.SalesScore, product.ProfitScore, product.Asin, product.Title, product.Brand, $"${product.Price}", product.SearchKeyword, product.ProductUrl);
+        var index = _resultsGrid.Rows.Add(_decisionStore.IsFavorite(product.Asin) ? "⭐" : "", product.UploadScore, product.UploadDecision, product.TitleQualityScore, product.ImageQualityScore, product.ContentQualityScore, product.VisualRiskLevel, product.ImageCount, product.CompetitionScore, product.ConfidenceScore, product.OverallScore, product.Recommendation, $"${product.RecommendedSalePrice}", $"${product.NetProfit}", product.NetMarginPercent, product.ProfitDecision, product.Rating, product.ReviewCount, product.Stars, product.SafetyScore, product.SalesScore, product.ProfitScore, product.Asin, product.Title, product.Brand, $"${product.Price}", product.SearchKeyword, product.ProductUrl);
         var row = _resultsGrid.Rows[index]; row.Tag = product;
         row.DefaultCellStyle.BackColor = product.UploadScore switch { >= 88 => Color.Honeydew, >= 74 => Color.LightYellow, >= 60 => Color.Moccasin, _ => Color.MistyRose };
     }
@@ -289,8 +289,9 @@ public sealed class MainForm : Form
     private void UpdateLiveStatus()
     {
         var profit = _allResults.Sum(x => x.NetProfit);
+        var avgQuality = _allResults.Count == 0 ? 0m : Math.Round(_allResults.Average(x => (x.TitleQualityScore + x.ImageQualityScore + x.ContentQualityScore) / 3m), 2);
         var acceptanceRate = CalculateAcceptanceRate(_allResults.Count, _allResults.Count + _resultsGrid.Rows.Count);
-        _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Toplam: {_allResults.Count} | Kabul: %{acceptanceRate:0.00} | Net: ${profit:0.00} | Süre: {FormatElapsed()}";
+        _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Toplam: {_allResults.Count} | Quality: {avgQuality:0.00} | Net: ${profit:0.00} | Süre: {FormatElapsed()}";
     }
 
     private static decimal CalculateAcceptanceRate(int acceptedCount, int scannedCount)
@@ -315,6 +316,8 @@ public sealed class MainForm : Form
         var reasons = new List<string> { p.IsAmazonChoice ? "+ Amazon Choice" : "- Amazon Choice değil", p.HasLowStockWarning ? "- Stok az uyarısı var" : "+ Stok uyarısı yok", p.HasUsuallyKeepItemText ? "+ Usually keep bilgisi var" : "+ Usually keep bilgisi yok", p.IsSponsored ? "- Sponsored sonuç" : "+ Organic sonuç", p.Price <= 60 ? "+ Amazon fiyatı iyi aralıkta" : "- Amazon fiyatı üst aralıkta", p.Rating >= 4.3m ? "+ Rating güçlü" : "- Rating zayıf veya okunamadı", p.ReviewCount >= 100 ? "+ Yorum sayısı güven veriyor" : "- Yorum sayısı düşük veya okunamadı", p.CompetitionScore <= 45 ? "+ Rekabet düşük/orta" : "- Rekabet yüksek olabilir", p.ImageCount >= 4 ? "+ Görsel seti yeterli" : "- Görsel sayısı eksik", p.VisualRiskLevel == "LOW" ? "+ Görsel risk düşük" : "- Görsel kontrol gerekli", p.UploadScore >= 88 ? "+ Upload Score güçlü" : "- Upload Score izleme gerektiriyor", p.ProfitDecision == "Profitable" ? "+ eBay kâr hedefini karşılıyor" : "- eBay kârı düşük" };
         return $"Favorite: {(isFavorite ? "YES ⭐" : "NO")}{Environment.NewLine}" +
                $"UPLOAD DECISION: {p.UploadDecision}{Environment.NewLine}Upload Score: {p.UploadScore}/100 | Competition: {p.CompetitionScore}/100{Environment.NewLine}" +
+               $"Listing Quality: Title {p.TitleQualityScore}/100 | Images {p.ImageQualityScore}/100 | Content {p.ContentQualityScore}/100{Environment.NewLine}" +
+               $"Quality Notes: {p.ListingQualityNotes}{Environment.NewLine}" +
                $"Visual Risk: {p.VisualRiskLevel} | Images: {p.ImageCount}/6 | {p.VisualRiskNotes}{Environment.NewLine}" +
                $"ASIN: {p.Asin}{Environment.NewLine}Brand: {p.Brand}{Environment.NewLine}Amazon Price: ${p.Price}{Environment.NewLine}" +
                $"Rating: {p.Rating}/5 | Reviews: {p.ReviewCount}{Environment.NewLine}" +
