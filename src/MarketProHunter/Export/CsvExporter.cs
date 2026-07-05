@@ -16,7 +16,7 @@ public sealed class CsvExporter
         }
 
         var builder = new StringBuilder();
-        builder.AppendLine("UploadScore,UploadDecision,RiskLevel,SweetSpot,OpportunitySummary,CompetitionScore,ConfidenceScore,VisualRiskLevel,VisualRiskNotes,ImageCount,ImageUrl1,ImageUrl2,ImageUrl3,ImageUrl4,ImageUrl5,ImageUrl6,OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,Rating,ReviewCount,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,LowStock,UsuallyKeep,ProductUrl,Keyword,Page,Notes");
+        builder.AppendLine("UploadScore,UploadDecision,RiskLevel,SweetSpot,OpportunitySummary,TitleQualityScore,ImageQualityScore,ContentQualityScore,ListingQualityNotes,CompetitionScore,ConfidenceScore,VisualRiskLevel,VisualRiskNotes,ImageCount,ImageUrl1,ImageUrl2,ImageUrl3,ImageUrl4,ImageUrl5,ImageUrl6,OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,Rating,ReviewCount,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,LowStock,UsuallyKeep,ProductUrl,Keyword,Page,Notes");
 
         foreach (var p in products)
         {
@@ -35,7 +35,7 @@ public sealed class CsvExporter
         }
 
         var builder = new StringBuilder();
-        builder.AppendLine("Rank,Tier,UploadScore,UploadDecision,RiskLevel,SweetSpot,CompetitionScore,ConfidenceScore,VisualRiskLevel,ImageCount,NetProfit,RecommendedSalePrice,ASIN,Brand,Title,ProductUrl,ImageUrl1,ImageUrl2,ImageUrl3,ImageUrl4,ImageUrl5,ImageUrl6,OpportunitySummary");
+        builder.AppendLine("Rank,Tier,UploadScore,UploadDecision,RiskLevel,SweetSpot,TitleQualityScore,ImageQualityScore,ContentQualityScore,ListingQualityNotes,CompetitionScore,ConfidenceScore,VisualRiskLevel,ImageCount,NetProfit,RecommendedSalePrice,ASIN,Brand,Title,ProductUrl,ImageUrl1,ImageUrl2,ImageUrl3,ImageUrl4,ImageUrl5,ImageUrl6,OpportunitySummary");
 
         foreach (var item in queue.Items)
         {
@@ -48,6 +48,10 @@ public sealed class CsvExporter
                 Escape(p.UploadDecision),
                 Escape(p.RiskLevel),
                 Escape(p.SweetSpot),
+                p.TitleQualityScore.ToString(CultureInfo.InvariantCulture),
+                p.ImageQualityScore.ToString(CultureInfo.InvariantCulture),
+                p.ContentQualityScore.ToString(CultureInfo.InvariantCulture),
+                Escape(p.ListingQualityNotes),
                 p.CompetitionScore.ToString(CultureInfo.InvariantCulture),
                 p.ConfidenceScore.ToString(CultureInfo.InvariantCulture),
                 Escape(p.VisualRiskLevel),
@@ -80,6 +84,10 @@ public sealed class CsvExporter
             Escape(p.RiskLevel),
             Escape(p.SweetSpot),
             Escape(p.OpportunitySummary),
+            p.TitleQualityScore.ToString(CultureInfo.InvariantCulture),
+            p.ImageQualityScore.ToString(CultureInfo.InvariantCulture),
+            p.ContentQualityScore.ToString(CultureInfo.InvariantCulture),
+            Escape(p.ListingQualityNotes),
             p.CompetitionScore.ToString(CultureInfo.InvariantCulture),
             p.ConfidenceScore.ToString(CultureInfo.InvariantCulture),
             Escape(p.VisualRiskLevel),
