@@ -29,6 +29,24 @@ MarketProHunter-win-x64
 7. Extract the ZIP file on Windows.
 8. Run `MarketProHunter.exe`.
 
+## How to build locally on Windows
+
+Use this only if you have .NET 8 SDK installed.
+
+1. Download or clone the repository.
+2. Open the repository folder.
+3. Double-click:
+
+```text
+tools\run-release.bat
+```
+
+4. When it finishes, run:
+
+```text
+publish\MarketProHunter\MarketProHunter.exe
+```
+
 ## Recommended first settings
 
 Use these first so the scan stays controlled:
