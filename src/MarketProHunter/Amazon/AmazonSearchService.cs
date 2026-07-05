@@ -217,7 +217,8 @@ public sealed class AmazonSearchService
             smartQueue.ExpectedNetProfit,
             smartQueue.AverageUploadScore,
             smartQueue.AverageConfidenceScore,
-            failedPageCount);
+            failedPageCount,
+            ExcelPath: excelPath);
     }
 
     private static async Task<string> FetchPageWithRetryAsync(
