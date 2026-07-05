@@ -37,7 +37,10 @@ jobs:
           if (!(Test-Path "publish/MarketProHunter/VERSION")) { throw "VERSION not found in publish output" }
           if (!(Test-Path "publish/MarketProHunter/QUICK_START.md")) { throw "QUICK_START.md not found in publish output" }
           if (!(Test-Path "publish/MarketProHunter/RELEASE_NOTES.md")) { throw "RELEASE_NOTES.md not found in publish output" }
-          Get-ChildItem publish/MarketProHunter | Select-Object Name, Length
+          if (!(Test-Path "publish/MarketProHunter/PACKAGING.md")) { throw "PACKAGING.md not found in publish output" }
+          if (!(Test-Path "publish/MarketProHunter/TEST_CHECKLIST.md")) { throw "TEST_CHECKLIST.md not found in publish output" }
+          if (!(Test-Path "publish/MarketProHunter/docs/DAILY_WORKFLOW.md")) { throw "docs/DAILY_WORKFLOW.md not found in publish output" }
+          Get-ChildItem publish/MarketProHunter -Recurse | Select-Object FullName, Length
 
       - name: Upload EXE package
         uses: actions/upload-artifact@v4
