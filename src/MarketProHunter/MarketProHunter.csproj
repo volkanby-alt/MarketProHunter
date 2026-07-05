@@ -44,5 +44,11 @@
     <None Include="..\..\docs\CHANGELOG_TEMPLATE.md" Link="docs\CHANGELOG_TEMPLATE.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\..\docs\EXPORT_COLUMNS.md" Link="docs\EXPORT_COLUMNS.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\docs\CONFIG_REFERENCE.md" Link="docs\CONFIG_REFERENCE.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>
