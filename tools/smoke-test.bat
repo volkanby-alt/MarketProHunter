@@ -25,6 +25,9 @@ echo.
 echo 4) Checking expected files...
 if not exist publish\MarketProHunter\MarketProHunter.exe goto missing_exe
 if not exist publish\MarketProHunter\config\vero-brands.txt goto missing_vero
+if not exist publish\MarketProHunter\VERSION goto missing_version
+if not exist publish\MarketProHunter\QUICK_START.md goto missing_quick_start
+if not exist publish\MarketProHunter\RELEASE_NOTES.md goto missing_release_notes
 
 echo.
 echo Smoke test passed.
@@ -41,6 +44,24 @@ exit /b 1
 :missing_vero
 echo.
 echo Smoke test failed: config\vero-brands.txt was not copied to publish output.
+pause
+exit /b 1
+
+:missing_version
+echo.
+echo Smoke test failed: VERSION was not copied to publish output.
+pause
+exit /b 1
+
+:missing_quick_start
+echo.
+echo Smoke test failed: QUICK_START.md was not copied to publish output.
+pause
+exit /b 1
+
+:missing_release_notes
+echo.
+echo Smoke test failed: RELEASE_NOTES.md was not copied to publish output.
 pause
 exit /b 1
 
