@@ -29,6 +29,13 @@ jobs:
       - name: Publish single-folder Windows app
         run: dotnet publish src/MarketProHunter/MarketProHunter.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishReadyToRun=false --output publish/MarketProHunter
 
+      - name: Verify publish output
+        shell: pwsh
+        run: |
+          if (!(Test-Path "publish/MarketProHunter/MarketProHunter.exe")) { throw "MarketProHunter.exe not found" }
+          if (!(Test-Path "publish/MarketProHunter/config/vero-brands.txt")) { throw "config/vero-brands.txt not found in publish output" }
+          Get-ChildItem publish/MarketProHunter | Select-Object Name, Length
+
       - name: Upload EXE package
         uses: actions/upload-artifact@v4
         with:
