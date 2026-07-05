@@ -29,5 +29,14 @@
     <None Include="..\..\RELEASE_NOTES.md" Link="RELEASE_NOTES.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\..\PACKAGING.md" Link="PACKAGING.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\TEST_CHECKLIST.md" Link="TEST_CHECKLIST.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\docs\DAILY_WORKFLOW.md" Link="docs\DAILY_WORKFLOW.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>
