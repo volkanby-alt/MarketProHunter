@@ -25,6 +25,13 @@ public sealed record ProductResult
     public int TitleQualityScore { get; init; }
     public int ImageQualityScore { get; init; }
     public int ContentQualityScore { get; init; }
+    public int BulletPointCount { get; init; }
+    public int SpecificationCount { get; init; }
+    public int BulletPointQualityScore { get; init; }
+    public int DescriptionQualityScore { get; init; }
+    public int SpecificationQualityScore { get; init; }
+    public bool HasAPlusContent { get; init; }
+    public string ProductPageQualityNotes { get; init; } = "";
     public string ListingQualityNotes { get; init; } = "";
     public int ConfidenceScore { get; init; }
     public int CompetitionScore { get; init; }
