@@ -85,6 +85,21 @@ public sealed class AmazonSearchService
                 }
 
                 var products = parser.Parse(html, keyword, page);
+                if (products.Count == 0)
+                {
+                    if (LooksLikeBlockedPage(html))
+                    {
+                        Interlocked.Increment(ref failedPageCount);
+                        logProgress?.Report($"WARN {keyword} | Sayfa {page}: Amazon koruma/CAPTCHA sayfası olabilir, atlandı.");
+                    }
+                    else
+                    {
+                        logProgress?.Report($"WARN {keyword} | Sayfa {page}: ürün kartı bulunamadı, atlandı.");
+                    }
+
+                    continue;
+                }
+
                 logProgress?.Report($"{keyword} | Sayfa {page}: {products.Count} ürün kartı bulundu.");
 
                 foreach (var product in products)
@@ -218,6 +233,14 @@ public sealed class AmazonSearchService
             .ThenBy(p => p.CompetitionScore)
             .ThenByDescending(p => p.ConfidenceScore)
             .ThenByDescending(p => p.ImageCount);
+    }
+
+    private static bool LooksLikeBlockedPage(string html)
+    {
+        return html.Contains("captcha", StringComparison.OrdinalIgnoreCase) ||
+               html.Contains("Enter the characters you see below", StringComparison.OrdinalIgnoreCase) ||
+               html.Contains("automated access", StringComparison.OrdinalIgnoreCase) ||
+               html.Contains("Sorry, we just need to make sure", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task WriteSummaryAsync(
