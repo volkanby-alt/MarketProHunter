@@ -20,6 +20,16 @@ public sealed class ProductFilter
             return FilterDecision.Reject("ASIN bulunamadı");
         }
 
+        if (string.IsNullOrWhiteSpace(product.Title))
+        {
+            return FilterDecision.Reject("Başlık bulunamadı");
+        }
+
+        if (LooksLikeBadListing(product.Title))
+        {
+            return FilterDecision.Reject("İstenmeyen ürün tipi");
+        }
+
         if (product.Price < _settings.MinPrice || product.Price > _settings.MaxPrice)
         {
             return FilterDecision.Reject($"Fiyat aralık dışı: {product.Price}");
@@ -51,5 +61,28 @@ public sealed class ProductFilter
         }
 
         return FilterDecision.Accept("Uygun");
+    }
+
+    private static bool LooksLikeBadListing(string title)
+    {
+        var blockedTerms = new[]
+        {
+            "gift card",
+            "eGift card",
+            "digital code",
+            "download code",
+            "subscription",
+            "renewed",
+            "refurbished",
+            "used",
+            "open box",
+            "replacement plan",
+            "protection plan",
+            "warranty",
+            "bundle only",
+            "parts only"
+        };
+
+        return blockedTerms.Any(term => title.Contains(term, StringComparison.OrdinalIgnoreCase));
     }
 }
