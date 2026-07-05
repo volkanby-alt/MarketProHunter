@@ -154,7 +154,7 @@ public sealed class AmazonSearchService
 
                     if (currentScanned % 25 == 0)
                     {
-                        logProgress?.Report($"İlerleme: {currentScanned} tarandı | {Volatile.Read(ref acceptedCount)} kabul | {Volatile.Read(ref skippedCount)} elendi");
+                        logProgress?.Report($"İlerleme: {currentScanned} tarandı | {Volatile.Read(ref acceptedCount)} kabul | {Volatile.Read(ref skippedCount)} elendi | Kabul oranı: {CalculateAcceptanceRate(Volatile.Read(ref acceptedCount), currentScanned):0.00}%");
                     }
                 }
 
@@ -173,6 +173,7 @@ public sealed class AmazonSearchService
         await exporter.WriteSmartQueueAsync(smartQueuePath, smartQueue, cancellationToken);
         await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, failedPageCount, orderedAccepted, smartQueue, cancellationToken);
         logProgress?.Report($"Smart Queue hazır: {smartQueue.SelectedCount}/{smartQueue.RequestedCount} ürün | Beklenen net kâr: ${smartQueue.ExpectedNetProfit} | Ortalama Upload: {smartQueue.AverageUploadScore} | Ortalama Confidence: {smartQueue.AverageConfidenceScore}%");
+        logProgress?.Report($"Kabul oranı: {CalculateAcceptanceRate(orderedAccepted.Count, scannedCount):0.00}%");
         logProgress?.Report($"Başarısız sayfa: {failedPageCount}");
         logProgress?.Report($"Smart Queue CSV: {smartQueuePath}");
         logProgress?.Report($"Özet rapor: {summaryPath}");
@@ -235,6 +236,11 @@ public sealed class AmazonSearchService
             .ThenByDescending(p => p.ImageCount);
     }
 
+    private static decimal CalculateAcceptanceRate(int acceptedCount, int scannedCount)
+    {
+        return scannedCount <= 0 ? 0m : Math.Round(acceptedCount * 100m / scannedCount, 2);
+    }
+
     private static bool LooksLikeBlockedPage(string html)
     {
         return html.Contains("captcha", StringComparison.OrdinalIgnoreCase) ||
@@ -268,6 +274,7 @@ public sealed class AmazonSearchService
         builder.AppendLine($"Scanned: {scannedCount}");
         builder.AppendLine($"Accepted: {acceptedProducts.Count}");
         builder.AppendLine($"Skipped: {skippedCount}");
+        builder.AppendLine($"Acceptance rate: {CalculateAcceptanceRate(acceptedProducts.Count, scannedCount):0.00}%");
         builder.AppendLine($"Failed pages: {failedPageCount}");
         builder.AppendLine($"Smart Queue: {smartQueue.SelectedCount}/{smartQueue.RequestedCount}");
         builder.AppendLine($"Expected net profit: ${smartQueue.ExpectedNetProfit:0.00}");
