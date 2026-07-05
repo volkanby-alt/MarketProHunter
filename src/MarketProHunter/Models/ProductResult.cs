@@ -29,6 +29,7 @@ public sealed record ProductResult
     public int SpecificationCount { get; init; }
     public int BulletPointQualityScore { get; init; }
     public int DescriptionQualityScore { get; init; }
+    public int DescriptionQualityQualityScore => DescriptionQualityScore;
     public int SpecificationQualityScore { get; init; }
     public bool HasAPlusContent { get; init; }
     public string ProductPageQualityNotes { get; init; } = "";
