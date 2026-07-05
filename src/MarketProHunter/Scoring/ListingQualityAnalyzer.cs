@@ -35,8 +35,9 @@ public sealed class ListingQualityAnalyzer
         if (wordCount is >= 8 and <= 28) score += 15;
         else if (wordCount < 6) score -= 12;
 
-        if (ContainsAny(title, "for ", "with ", "set", "pack", "kit", "compatible", "replacement", "organizer", "cleaner", "filter", "cover", "mat", "tool")) score += 8;
-        if (ContainsAny(title, "!!!", "best", "hot sale", "cheap", "free shipping")) score -= 12;
+        if (ContainsAny(title, "for ", "with ", "set", "pack", "kit", "compatible", "replacement", "organizer", "cleaner", "filter", "cover", "mat", "tool", "heavy duty", "adjustable", "waterproof", "portable")) score += 8;
+        if (ContainsAny(title, "!!!", "best", "hot sale", "cheap", "free shipping", "must have", "viral")) score -= 12;
+        if (HasSuspiciousCapitalization(title)) score -= 8;
 
         return Clamp(score);
     }
@@ -70,6 +71,7 @@ public sealed class ListingQualityAnalyzer
         if (product.ReviewCount > 0) score += 8;
         if (product.ImageCount >= 4) score += 10;
         if (!string.IsNullOrWhiteSpace(product.ProductUrl)) score += 4;
+        if (product.Title.Length >= 90 && product.ImageCount >= 4) score += 5;
 
         return Clamp(score);
     }
@@ -84,9 +86,19 @@ public sealed class ListingQualityAnalyzer
 
         if (product.ImageCount < 4) notes.Add($"Görsel az: {product.ImageCount}/4 minimum");
         if (product.Title.Length < 45) notes.Add("Başlık kısa");
+        if (product.Title.Length > 180) notes.Add("Başlık çok uzun, eBay başlığı için kısaltma gerekebilir");
+        if (HasSuspiciousCapitalization(product.Title)) notes.Add("Başlık yazımı doğal görünmüyor");
         if (string.IsNullOrWhiteSpace(product.Brand)) notes.Add("Marka okunamadı");
 
         return string.Join(" | ", notes);
+    }
+
+    private static bool HasSuspiciousCapitalization(string title)
+    {
+        var letters = title.Where(char.IsLetter).ToList();
+        if (letters.Count < 12) return false;
+        var upper = letters.Count(char.IsUpper);
+        return upper > letters.Count * 0.75;
     }
 
     private static bool ContainsAny(string value, params string[] terms)
