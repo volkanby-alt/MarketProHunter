@@ -22,6 +22,18 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+publish/
+
+# MarketProHunter generated output
+output/
+amazon_results_*.csv
+smart_queue_top200_*.csv
+marketprohunter_report_*.xlsx
+run_summary_*.txt
+
+# MarketProHunter local user state
+user-decisions.json
+*.local.json
 
 # .NET Core
 project.lock.json
@@ -39,10 +51,19 @@ ScaffoldingReadMe.txt
 # dotenv environment variables file
 .env
 
+# Visual Studio / user files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
 # Others
 ~$*
 *~
 CodeCoverage/
+Thumbs.db
+.DS_Store
 
 # MSBuild Binary and Structured Log
 *.binlog
