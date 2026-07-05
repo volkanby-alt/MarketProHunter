@@ -222,11 +222,13 @@ public sealed class MainForm : Form
             var result = await service.RunManyAsync(keywords, (int)_pagesNumeric.Value, settings, profitSettings, logProgress, productProgress, _cancellationTokenSource.Token);
             _runTimer?.Stop();
             var failedText = result.FailedPageCount > 0 ? $" | Hatalı sayfa: {result.FailedPageCount}" : string.Empty;
-            _statusLabel.Text = $"Bitti: {result.AcceptedCount} uygun ürün | Süre: {FormatElapsed()}{failedText}"; AppendLog($"CSV dosyası: {result.OutputPath}");
+            var acceptanceRate = CalculateAcceptanceRate(result.AcceptedCount, result.ScannedCount);
+            _statusLabel.Text = $"Bitti: {result.AcceptedCount} uygun ürün | Kabul: %{acceptanceRate:0.00} | Süre: {FormatElapsed()}{failedText}"; AppendLog($"CSV dosyası: {result.OutputPath}");
+            AppendLog($"Kabul oranı: %{acceptanceRate:0.00}");
             if (result.FailedPageCount > 0) AppendLog($"Hatalı sayfa sayısı: {result.FailedPageCount}");
             if (!string.IsNullOrWhiteSpace(result.SmartQueuePath)) AppendLog($"Smart Queue CSV: {result.SmartQueuePath}");
             if (!string.IsNullOrWhiteSpace(result.SummaryPath)) AppendLog($"Özet rapor: {result.SummaryPath}");
-            MessageBox.Show($"Tarama bitti. Uygun ürün: {result.AcceptedCount}\nSüre: {FormatElapsed()}\nHatalı sayfa: {result.FailedPageCount}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"Tarama bitti. Uygun ürün: {result.AcceptedCount}\nKabul oranı: %{acceptanceRate:0.00}\nSüre: {FormatElapsed()}\nHatalı sayfa: {result.FailedPageCount}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException) { _runTimer?.Stop(); _statusLabel.Text = $"Durduruldu | Süre: {FormatElapsed()}"; AppendLog("Tarama kullanıcı tarafından durduruldu."); }
         catch (Exception ex) { _runTimer?.Stop(); _statusLabel.Text = "Hata"; AppendLog("HATA: " + ex.Message); MessageBox.Show(ex.Message, "MarketProHunter Hata", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -287,7 +289,13 @@ public sealed class MainForm : Form
     private void UpdateLiveStatus()
     {
         var profit = _allResults.Sum(x => x.NetProfit);
-        _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Toplam: {_allResults.Count} | Net: ${profit:0.00} | Süre: {FormatElapsed()}";
+        var acceptanceRate = CalculateAcceptanceRate(_allResults.Count, _allResults.Count + _resultsGrid.Rows.Count);
+        _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Toplam: {_allResults.Count} | Kabul: %{acceptanceRate:0.00} | Net: ${profit:0.00} | Süre: {FormatElapsed()}";
+    }
+
+    private static decimal CalculateAcceptanceRate(int acceptedCount, int scannedCount)
+    {
+        return scannedCount <= 0 ? 0m : Math.Round(acceptedCount * 100m / scannedCount, 2);
     }
 
     private string FormatElapsed()
