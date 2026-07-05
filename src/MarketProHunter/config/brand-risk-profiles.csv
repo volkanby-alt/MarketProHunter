@@ -1,0 +1,15 @@
+# Brand,RiskScore,RiskLevel,Recommendation,Notes
+LEGO,99,VERY_HIGH,REJECT,High trademark and brand protection risk.
+NIKE,98,VERY_HIGH,REJECT,High brand protection risk.
+ADIDAS,98,VERY_HIGH,REJECT,High brand protection risk.
+APPLE,98,VERY_HIGH,REJECT,High trademark and compatibility risk.
+SAMSUNG,95,VERY_HIGH,REJECT,High trademark and compatibility risk.
+MILWAUKEE,92,VERY_HIGH,REJECT,Strong brand protection concern.
+DEWALT,82,HIGH,REVIEW,Tool brand; review carefully before upload.
+STANLEY,70,HIGH,REVIEW,Popular brand with elevated competition and brand risk.
+BLACK+DECKER,75,HIGH,REVIEW,Tool brand; review carefully.
+SIMPLE MODERN,18,LOW,REVIEW,Generally lower risk but still review product details.
+VEVOR,20,LOW,REVIEW,Generally lower risk but check category and warranty language.
+DELPHI,35,MEDIUM,REVIEW,Automotive brand; review compatibility wording.
+MR. CLEAN,72,HIGH,REVIEW,Household brand; review brand usage carefully.
+MRS. MEYER'S,70,HIGH,REVIEW,Household brand; review brand usage carefully.
