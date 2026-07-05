@@ -28,6 +28,7 @@ public sealed class MainForm : Form
     private readonly NumericUpDown _minNetProfitNumeric = new();
     private readonly Button _applyFilterButton = new();
     private readonly Button _clearFilterButton = new();
+    private readonly Button _openOutputButton = new();
     private readonly Button _favoriteButton = new();
     private readonly Button _rejectAsinButton = new();
     private readonly Button _rejectBrandButton = new();
@@ -43,6 +44,7 @@ public sealed class MainForm : Form
     private readonly UserDecisionStore _decisionStore = new();
     private CancellationTokenSource? _cancellationTokenSource;
     private Stopwatch? _runTimer;
+    private string? _lastOutputDirectory;
 
     public MainForm()
     {
@@ -161,13 +163,14 @@ public sealed class MainForm : Form
         SetupMoneyNumeric(_minNetProfitNumeric, 0, 100, 2m);
         _applyFilterButton.Text = "Filtrele"; _applyFilterButton.Click += (_, _) => RefreshGrid();
         _clearFilterButton.Text = "Temizle"; _clearFilterButton.Click += (_, _) => { _recommendationFilter.SelectedIndex = 0; _minOverallFilter.Value = 0; RefreshGrid(); };
+        _openOutputButton.Text = "Raporlar"; _openOutputButton.Enabled = false; _openOutputButton.Click += (_, _) => OpenOutputFolder();
         AddLabeledControl(panel, "Filter", _recommendationFilter, 0, 0);
         AddLabeledControl(panel, "Min Score", _minOverallFilter, 1, 0);
         AddLabeledControl(panel, "eBay %", _ebayFeePercentNumeric, 2, 0);
         AddLabeledControl(panel, "Promoted %", _promotedPercentNumeric, 3, 0);
         AddLabeledControl(panel, "Target %", _targetProfitPercentNumeric, 4, 0);
         AddLabeledControl(panel, "Min Net $", _minNetProfitNumeric, 5, 0);
-        panel.Controls.Add(_applyFilterButton, 6, 0); panel.Controls.Add(_clearFilterButton, 7, 0); panel.Controls.Add(_sponsoredCheckBox, 8, 0);
+        panel.Controls.Add(_applyFilterButton, 6, 0); panel.Controls.Add(_clearFilterButton, 7, 0); panel.Controls.Add(_sponsoredCheckBox, 8, 0); panel.Controls.Add(_openOutputButton, 9, 0);
         group.Controls.Add(panel);
         return group;
     }
@@ -221,6 +224,7 @@ public sealed class MainForm : Form
         {
             var result = await service.RunManyAsync(keywords, (int)_pagesNumeric.Value, settings, profitSettings, logProgress, productProgress, _cancellationTokenSource.Token);
             _runTimer?.Stop();
+            RememberOutputFolder(result);
             var failedText = result.FailedPageCount > 0 ? $" | Hatalı sayfa: {result.FailedPageCount}" : string.Empty;
             var acceptanceRate = CalculateAcceptanceRate(result.AcceptedCount, result.ScannedCount);
             _statusLabel.Text = $"Bitti: {result.AcceptedCount} uygun ürün | Kabul: %{acceptanceRate:0.00} | Süre: {FormatElapsed()}{failedText}"; AppendLog($"CSV dosyası: {result.OutputPath}");
@@ -229,6 +233,7 @@ public sealed class MainForm : Form
             if (!string.IsNullOrWhiteSpace(result.SmartQueuePath)) AppendLog($"Smart Queue CSV: {result.SmartQueuePath}");
             if (!string.IsNullOrWhiteSpace(result.ExcelPath)) AppendLog($"Excel raporu: {result.ExcelPath}");
             if (!string.IsNullOrWhiteSpace(result.SummaryPath)) AppendLog($"Özet rapor: {result.SummaryPath}");
+            if (!string.IsNullOrWhiteSpace(_lastOutputDirectory)) AppendLog($"Rapor klasörü: {_lastOutputDirectory}");
             var excelText = string.IsNullOrWhiteSpace(result.ExcelPath) ? string.Empty : $"\nExcel: {result.ExcelPath}";
             MessageBox.Show($"Tarama bitti. Uygun ürün: {result.AcceptedCount}\nKabul oranı: %{acceptanceRate:0.00}\nSüre: {FormatElapsed()}\nHatalı sayfa: {result.FailedPageCount}{excelText}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -268,7 +273,7 @@ public sealed class MainForm : Form
 
     private void SetRunningState(bool running)
     {
-        _startButton.Enabled = !running; _stopButton.Enabled = running; _progressBar.Visible = running; _categoryListBox.Enabled = !running; _parallelNumeric.Enabled = !running;
+        _startButton.Enabled = !running; _stopButton.Enabled = running; _progressBar.Visible = running; _categoryListBox.Enabled = !running; _parallelNumeric.Enabled = !running; _openOutputButton.Enabled = !running && HasOutputFolder();
         if (running) _statusLabel.Text = "Çalışıyor...";
     }
 
@@ -293,6 +298,31 @@ public sealed class MainForm : Form
         var profit = _allResults.Sum(x => x.NetProfit);
         var avgQuality = _allResults.Count == 0 ? 0m : Math.Round(_allResults.Average(AverageQuality), 2);
         _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Toplam: {_allResults.Count} | Quality: {avgQuality:0.00} | Net: ${profit:0.00} | Süre: {FormatElapsed()}";
+    }
+
+    private void RememberOutputFolder(SearchRunResult result)
+    {
+        var path = FirstNonEmpty(result.ExcelPath, result.SmartQueuePath, result.OutputPath, result.SummaryPath);
+        _lastOutputDirectory = string.IsNullOrWhiteSpace(path) ? null : Path.GetDirectoryName(path);
+        _openOutputButton.Enabled = HasOutputFolder();
+    }
+
+    private bool HasOutputFolder() => !string.IsNullOrWhiteSpace(_lastOutputDirectory) && Directory.Exists(_lastOutputDirectory);
+
+    private void OpenOutputFolder()
+    {
+        if (!HasOutputFolder())
+        {
+            MessageBox.Show("Henüz açılacak rapor klasörü yok. Önce bir tarama çalıştırın.", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo { FileName = _lastOutputDirectory!, UseShellExecute = true });
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
     }
 
     private static decimal CalculateAcceptanceRate(int acceptedCount, int scannedCount)
