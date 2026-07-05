@@ -32,6 +32,7 @@ public sealed class MainForm : Form
     private readonly Button _favoriteButton = new();
     private readonly Button _rejectAsinButton = new();
     private readonly Button _rejectBrandButton = new();
+    private readonly Button _openProductButton = new();
     private readonly Button _startButton = new();
     private readonly Button _stopButton = new();
     private readonly ProgressBar _progressBar = new();
@@ -107,7 +108,8 @@ public sealed class MainForm : Form
         _favoriteButton.Text = "⭐ Favorite"; _favoriteButton.Width = 100; _favoriteButton.Click += (_, _) => FavoriteSelectedProduct();
         _rejectAsinButton.Text = "Reject ASIN"; _rejectAsinButton.Width = 110; _rejectAsinButton.Click += (_, _) => RejectSelectedAsin();
         _rejectBrandButton.Text = "Reject Brand"; _rejectBrandButton.Width = 115; _rejectBrandButton.Click += (_, _) => RejectSelectedBrand();
-        panel.Controls.Add(_favoriteButton); panel.Controls.Add(_rejectAsinButton); panel.Controls.Add(_rejectBrandButton);
+        _openProductButton.Text = "Amazon'da Aç"; _openProductButton.Width = 115; _openProductButton.Click += (_, _) => OpenSelectedProductUrl();
+        panel.Controls.Add(_favoriteButton); panel.Controls.Add(_rejectAsinButton); panel.Controls.Add(_rejectBrandButton); panel.Controls.Add(_openProductButton);
         return panel;
     }
 
@@ -320,6 +322,24 @@ public sealed class MainForm : Form
         Process.Start(new ProcessStartInfo { FileName = _lastOutputDirectory!, UseShellExecute = true });
     }
 
+    private void OpenSelectedProductUrl()
+    {
+        var product = GetSelectedProduct();
+        if (product is null)
+        {
+            MessageBox.Show("Önce sonuç listesinden bir ürün seçin.", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(product.ProductUrl))
+        {
+            MessageBox.Show("Seçili ürün için açılacak Amazon URL bilgisi yok.", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo { FileName = product.ProductUrl, UseShellExecute = true });
+    }
+
     private static string? FirstNonEmpty(params string?[] values)
     {
         return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
@@ -332,7 +352,7 @@ public sealed class MainForm : Form
 
     private static decimal AverageQuality(ProductResult p)
     {
-        return Math.Round((p.TitleQualityScore + p.ImageQualityScore + p.ContentQualityScore + p.BulletPointQualityScore + p.DescriptionQualityScore + p.SpecificationQualityScore) / 6m, 2);
+        return Math.Round((p.TitleQualityScore + p.ImageQualityScore + p.ContentQualityScore + p.BulletPointQualityScore + p.DescriptionQualityQualityScore + p.SpecificationQualityScore) / 6m, 2);
     }
 
     private string FormatElapsed()
