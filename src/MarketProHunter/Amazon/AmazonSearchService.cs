@@ -56,6 +56,7 @@ public sealed class AmazonSearchService
         var smartQueueEngine = new SmartQueueEngine();
         var profitEngine = new EbayProfitEngine();
         var exporter = new CsvExporter();
+        var excelExporter = new ExcelExporter();
         var accepted = new ConcurrentBag<ProductResult>();
         var acceptedAsins = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         var scannedCount = 0;
@@ -189,17 +190,20 @@ public sealed class AmazonSearchService
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         var outputPath = Path.Combine(AppContext.BaseDirectory, "output", $"amazon_results_{timestamp}.csv");
         var smartQueuePath = Path.Combine(AppContext.BaseDirectory, "output", $"smart_queue_top200_{timestamp}.csv");
+        var excelPath = Path.Combine(AppContext.BaseDirectory, "output", $"marketprohunter_report_{timestamp}.xlsx");
         var summaryPath = Path.Combine(AppContext.BaseDirectory, "output", $"run_summary_{timestamp}.txt");
         await exporter.WriteAsync(outputPath, orderedAccepted, cancellationToken);
 
         var smartQueue = smartQueueEngine.Build(orderedAccepted, SmartQueueEngine.DefaultQueueSize);
         await exporter.WriteSmartQueueAsync(smartQueuePath, smartQueue, cancellationToken);
+        await excelExporter.WriteWorkbookAsync(excelPath, orderedAccepted, smartQueue, cancellationToken);
         await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, failedPageCount, failedProductPageCount, orderedAccepted, smartQueue, cancellationToken);
         logProgress?.Report($"Smart Queue hazır: {smartQueue.SelectedCount}/{smartQueue.RequestedCount} ürün | Beklenen net kâr: ${smartQueue.ExpectedNetProfit} | Ortalama Upload: {smartQueue.AverageUploadScore} | Ortalama Confidence: {smartQueue.AverageConfidenceScore}% | Ortalama Quality: {smartQueue.AverageListingQualityScore}");
         logProgress?.Report($"Kabul oranı: {CalculateAcceptanceRate(orderedAccepted.Count, scannedCount):0.00}%");
         logProgress?.Report($"Başarısız sayfa: {failedPageCount}");
         logProgress?.Report($"Detay sayfası zayıf/alınamadı: {failedProductPageCount}");
         logProgress?.Report($"Smart Queue CSV: {smartQueuePath}");
+        logProgress?.Report($"Excel raporu: {excelPath}");
         logProgress?.Report($"Özet rapor: {summaryPath}");
 
         return new SearchRunResult(
