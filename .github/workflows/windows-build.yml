@@ -34,6 +34,9 @@ jobs:
         run: |
           if (!(Test-Path "publish/MarketProHunter/MarketProHunter.exe")) { throw "MarketProHunter.exe not found" }
           if (!(Test-Path "publish/MarketProHunter/config/vero-brands.txt")) { throw "config/vero-brands.txt not found in publish output" }
+          if (!(Test-Path "publish/MarketProHunter/VERSION")) { throw "VERSION not found in publish output" }
+          if (!(Test-Path "publish/MarketProHunter/QUICK_START.md")) { throw "QUICK_START.md not found in publish output" }
+          if (!(Test-Path "publish/MarketProHunter/RELEASE_NOTES.md")) { throw "RELEASE_NOTES.md not found in publish output" }
           Get-ChildItem publish/MarketProHunter | Select-Object Name, Length
 
       - name: Upload EXE package
