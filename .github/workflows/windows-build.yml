@@ -40,6 +40,8 @@ jobs:
           if (!(Test-Path "publish/MarketProHunter/PACKAGING.md")) { throw "PACKAGING.md not found in publish output" }
           if (!(Test-Path "publish/MarketProHunter/TEST_CHECKLIST.md")) { throw "TEST_CHECKLIST.md not found in publish output" }
           if (!(Test-Path "publish/MarketProHunter/docs/DAILY_WORKFLOW.md")) { throw "docs/DAILY_WORKFLOW.md not found in publish output" }
+          if (!(Test-Path "publish/MarketProHunter/docs/KNOWN_ISSUES.md")) { throw "docs/KNOWN_ISSUES.md not found in publish output" }
+          if (!(Test-Path "publish/MarketProHunter/docs/CHANGELOG_TEMPLATE.md")) { throw "docs/CHANGELOG_TEMPLATE.md not found in publish output" }
           Get-ChildItem publish/MarketProHunter -Recurse | Select-Object FullName, Length
 
       - name: Upload EXE package
