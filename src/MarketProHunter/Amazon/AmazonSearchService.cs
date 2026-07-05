@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Threading;
+using MarketProHunter.BrandIntelligence;
 using MarketProHunter.Deduplication;
 using MarketProHunter.Export;
 using MarketProHunter.Filters;
@@ -48,6 +49,7 @@ public sealed class AmazonSearchService
         if (maxPages < 1) maxPages = 1;
 
         var veroFilter = new VeroBrandFilter("config/vero-brands.txt");
+        var brandEngine = new BrandIntelligenceEngine();
         var productFilter = new ProductFilter(settings, veroFilter);
         var scoringEngine = new ScoringEngine();
         var listingQualityAnalyzer = new ListingQualityAnalyzer();
@@ -116,6 +118,7 @@ public sealed class AmazonSearchService
 
                     if (decision.Accepted && acceptedAsins.TryAdd(product.Asin, 0))
                     {
+                        var brandProfile = brandEngine.Analyze(product.Brand);
                         var score = scoringEngine.Score(product);
                         var quality = listingQualityAnalyzer.Analyze(product);
                         var pageData = await FetchAndParseProductPageAsync(client, productPageParser, product, logProgress, token);
@@ -139,6 +142,10 @@ public sealed class AmazonSearchService
                             HasAPlusContent = pageData.HasAPlusContent,
                             ProductPageQualityNotes = pageQuality.Notes,
                             ListingQualityNotes = quality.Notes,
+                            BrandScore = 100 - brandProfile.RiskScore,
+                            BrandLevel = brandProfile.RiskLevel,
+                            BrandAction = brandProfile.Recommendation,
+                            BrandProfileNotes = brandProfile.Notes,
                             SafetyScore = score.SafetyScore,
                             SalesScore = score.SalesScore,
                             ProfitScore = score.ProfitScore,
@@ -168,7 +175,7 @@ public sealed class AmazonSearchService
                         accepted.Add(acceptedProduct);
                         Interlocked.Increment(ref acceptedCount);
                         acceptedProgress?.Report(acceptedProduct);
-                        logProgress?.Report($"OK  {product.Asin} | {score.UploadDecision} | Upload {score.UploadScore} | Title {quality.TitleQualityScore} | Img {quality.ImageQualityScore} | Bullets {pageData.BulletPointCount} | Specs {pageData.SpecificationCount} | Net ${profit.NetProfit}");
+                        logProgress?.Report($"OK  {product.Asin} | {score.UploadDecision} | Upload {score.UploadScore} | Brand {acceptedProduct.BrandScore} {acceptedProduct.BrandLevel} | Title {quality.TitleQualityScore} | Img {quality.ImageQualityScore} | Bullets {pageData.BulletPointCount} | Specs {pageData.SpecificationCount} | Net ${profit.NetProfit}");
                     }
                     else
                     {
@@ -291,6 +298,7 @@ public sealed class AmazonSearchService
     {
         return products
             .OrderByDescending(p => p.UploadScore)
+            .ThenByDescending(p => p.BrandScore)
             .ThenByDescending(p => p.NetProfit)
             .ThenByDescending(p => p.BulletPointQualityScore)
             .ThenByDescending(p => p.DescriptionQualityScore)
@@ -359,10 +367,11 @@ public sealed class AmazonSearchService
         foreach (var item in smartQueue.Items.Take(10))
         {
             var p = item.Product;
-            builder.AppendLine($"#{item.Rank} {item.Tier} | {p.Asin} | Upload {p.UploadScore} | Title {p.TitleQualityScore} | Images {p.ImageQualityScore} | Bullets {p.BulletPointQualityScore} | Desc {p.DescriptionQualityScore} | Specs {p.SpecificationQualityScore} | Net ${p.NetProfit:0.00}");
+            builder.AppendLine($"#{item.Rank} {item.Tier} | {p.Asin} | Upload {p.UploadScore} | Brand {p.BrandScore} {p.BrandLevel} | Title {p.TitleQualityScore} | Images {p.ImageQualityScore} | Bullets {p.BulletPointQualityScore} | Desc {p.DescriptionQualityScore} | Specs {p.SpecificationQualityScore} | Net ${p.NetProfit:0.00}");
             builder.AppendLine($"Brand: {p.Brand}");
             builder.AppendLine($"Title: {Shorten(p.Title)}");
             builder.AppendLine($"Quality: {p.ListingQualityNotes}");
+            builder.AppendLine($"Brand Notes: {p.BrandProfileNotes}");
             builder.AppendLine($"Page: {p.ProductPageQualityNotes}");
             builder.AppendLine($"Why: {p.OpportunitySummary}");
             builder.AppendLine();
