@@ -22,6 +22,10 @@ public sealed record ProductResult
     public int ImageCount { get; init; }
     public string VisualRiskLevel { get; init; } = "";
     public string VisualRiskNotes { get; init; } = "";
+    public int TitleQualityScore { get; init; }
+    public int ImageQualityScore { get; init; }
+    public int ContentQualityScore { get; init; }
+    public string ListingQualityNotes { get; init; } = "";
     public int ConfidenceScore { get; init; }
     public int CompetitionScore { get; init; }
     public int UploadScore { get; init; }
