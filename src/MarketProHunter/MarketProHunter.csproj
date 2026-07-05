@@ -38,5 +38,11 @@
     <None Include="..\..\docs\DAILY_WORKFLOW.md" Link="docs\DAILY_WORKFLOW.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\..\docs\KNOWN_ISSUES.md" Link="docs\KNOWN_ISSUES.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\docs\CHANGELOG_TEMPLATE.md" Link="docs\CHANGELOG_TEMPLATE.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>
