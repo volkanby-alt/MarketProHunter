@@ -34,6 +34,10 @@ public sealed record ProductResult
     public bool HasAPlusContent { get; init; }
     public string ProductPageQualityNotes { get; init; } = "";
     public string ListingQualityNotes { get; init; } = "";
+    public int BrandScore { get; init; }
+    public string BrandLevel { get; init; } = "";
+    public string BrandAction { get; init; } = "";
+    public string BrandProfileNotes { get; init; } = "";
     public int ConfidenceScore { get; init; }
     public int CompetitionScore { get; init; }
     public int UploadScore { get; init; }
