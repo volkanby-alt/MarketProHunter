@@ -202,15 +202,15 @@ public sealed class AmazonSearchService
         var smartQueuePath = Path.Combine(AppContext.BaseDirectory, "output", $"smart_queue_top200_{timestamp}.csv");
         var excelPath = Path.Combine(AppContext.BaseDirectory, "output", $"marketprohunter_report_{timestamp}.xlsx");
         var summaryPath = Path.Combine(AppContext.BaseDirectory, "output", $"run_summary_{timestamp}.txt");
-        await exporter.WriteAsync(outputPath, orderedAccepted, cancellationToken);
+        await exporter.WriteAsync(outputPath, duplicateSafeAccepted, cancellationToken);
 
         var smartQueue = smartQueueEngine.Build(duplicateSafeAccepted, SmartQueueEngine.DefaultQueueSize);
         await exporter.WriteSmartQueueAsync(smartQueuePath, smartQueue, cancellationToken);
-        await excelExporter.WriteWorkbookAsync(excelPath, orderedAccepted, smartQueue, cancellationToken);
-        await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, failedPageCount, failedProductPageCount, orderedAccepted, smartQueue, duplicateRemovedCount, cancellationToken);
-        logProgress?.Report($"Duplicate Killer: {duplicateRemovedCount} varyasyon/tekrar Smart Queue dışına alındı.");
+        await excelExporter.WriteWorkbookAsync(excelPath, duplicateSafeAccepted, smartQueue, cancellationToken);
+        await WriteSummaryAsync(summaryPath, keywordList, maxPages, scannedCount, skippedCount, failedPageCount, failedProductPageCount, duplicateSafeAccepted, smartQueue, duplicateRemovedCount, cancellationToken);
+        logProgress?.Report($"Duplicate Killer: {duplicateRemovedCount} varyasyon/tekrar rapor dışına alındı.");
         logProgress?.Report($"Smart Queue hazır: {smartQueue.SelectedCount}/{smartQueue.RequestedCount} ürün | Beklenen net kâr: ${smartQueue.ExpectedNetProfit} | Ortalama Upload: {smartQueue.AverageUploadScore} | Ortalama Confidence: {smartQueue.AverageConfidenceScore}% | Ortalama Quality: {smartQueue.AverageListingQualityScore}");
-        logProgress?.Report($"Kabul oranı: {CalculateAcceptanceRate(orderedAccepted.Count, scannedCount):0.00}%");
+        logProgress?.Report($"Kabul oranı: {CalculateAcceptanceRate(duplicateSafeAccepted.Count, scannedCount):0.00}%");
         logProgress?.Report($"Başarısız sayfa: {failedPageCount}");
         logProgress?.Report($"Detay sayfası zayıf/alınamadı: {failedProductPageCount}");
         logProgress?.Report($"Smart Queue CSV: {smartQueuePath}");
@@ -219,7 +219,7 @@ public sealed class AmazonSearchService
 
         return new SearchRunResult(
             scannedCount,
-            orderedAccepted.Count,
+            duplicateSafeAccepted.Count,
             skippedCount,
             outputPath,
             smartQueuePath,
@@ -383,6 +383,6 @@ public sealed class AmazonSearchService
     private static string Shorten(string value)
     {
         if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-        return value.Length <= 80 ? value : value[..80] + "...";
+        return value.Length <= 120 ? value : value[..120] + "...";
     }
 }
