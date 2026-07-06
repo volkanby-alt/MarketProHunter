@@ -20,6 +20,9 @@
     <None Update="config\vero-brands.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="config\brand-risk-profiles.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="..\..\VERSION" Link="VERSION">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
