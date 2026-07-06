@@ -169,7 +169,7 @@ public sealed class MainForm : Form
         var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 10, RowCount = 1, Padding = new Padding(5) };
         for (var i = 0; i < 10; i++) panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10f));
         _recommendationFilter.DropDownStyle = ComboBoxStyle.DropDownList;
-        _recommendationFilter.Items.AddRange(new object[] { "All", "Upload", "Review", "Caution", "Reject", "Favorite", "Profitable" });
+        _recommendationFilter.Items.AddRange(new object[] { "Listele + İncele", "All", "Upload", "Review", "Caution", "Reject", "Favorite", "Profitable" });
         _recommendationFilter.SelectedIndex = 0;
         _minOverallFilter.Minimum = 0; _minOverallFilter.Maximum = 100; _minOverallFilter.Value = 0;
         SetupMoneyNumeric(_ebayFeePercentNumeric, 0, 30, 13.25m);
@@ -179,7 +179,7 @@ public sealed class MainForm : Form
         _applyFilterButton.Text = "Filtrele"; _applyFilterButton.Click += (_, _) => RefreshGrid();
         _clearFilterButton.Text = "Temizle"; _clearFilterButton.Click += (_, _) => { _recommendationFilter.SelectedIndex = 0; _minOverallFilter.Value = 0; RefreshGrid(); };
         _openOutputButton.Text = "Raporlar"; _openOutputButton.Enabled = false; _openOutputButton.Click += (_, _) => OpenOutputFolder();
-        AddLabeledControl(panel, "Filter", _recommendationFilter, 0, 0);
+        AddLabeledControl(panel, "Görüntü", _recommendationFilter, 0, 0);
         AddLabeledControl(panel, "Min Score", _minOverallFilter, 1, 0);
         AddLabeledControl(panel, "eBay %", _ebayFeePercentNumeric, 2, 0);
         AddLabeledControl(panel, "Promoted %", _promotedPercentNumeric, 3, 0);
@@ -301,17 +301,24 @@ public sealed class MainForm : Form
     private bool PassesCurrentFilter(ProductResult product)
     {
         if (_decisionStore.IsRejected(product)) return false;
-        var selected = _recommendationFilter.SelectedItem?.ToString() ?? "All";
+        var selected = _recommendationFilter.SelectedItem?.ToString() ?? "Listele + İncele";
+        if (selected == "Listele + İncele") return IsUsefulCandidate(product) && product.OverallScore >= _minOverallFilter.Value;
         if (selected == "Favorite") return _decisionStore.IsFavorite(product.Asin);
         if (selected == "Profitable") return product.ProfitDecision.Equals("Profitable", StringComparison.OrdinalIgnoreCase);
         if (selected != "All" && !product.Recommendation.Equals(selected, StringComparison.OrdinalIgnoreCase)) return false;
         return product.OverallScore >= _minOverallFilter.Value;
     }
 
+    private static bool IsUsefulCandidate(ProductResult product)
+    {
+        return !product.Recommendation.Equals("Reject", StringComparison.OrdinalIgnoreCase)
+            && !product.UploadDecision.Equals("Reject", StringComparison.OrdinalIgnoreCase);
+    }
+
     private void RefreshGrid()
     {
         _resultsGrid.Rows.Clear();
-        foreach (var p in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.UploadScore).ThenByDescending(p => p.BrandScore).ThenByDescending(p => p.NetProfit).ThenByDescending(AverageQuality).ThenBy(p => p.CompetitionScore).ThenByDescending(p => p.ConfidenceScore)) AddProductRowToGrid(p);
+        foreach (var p in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.Recommendation.Equals("Upload", StringComparison.OrdinalIgnoreCase)).ThenByDescending(p => p.UploadScore).ThenByDescending(p => p.BrandScore).ThenByDescending(p => p.NetProfit).ThenByDescending(AverageQuality).ThenBy(p => p.CompetitionScore).ThenByDescending(p => p.ConfidenceScore)) AddProductRowToGrid(p);
         UpdateLiveStatus();
     }
 
@@ -356,7 +363,8 @@ public sealed class MainForm : Form
     {
         var profit = _allResults.Sum(x => x.NetProfit);
         var avgQuality = _allResults.Count == 0 ? 0m : Math.Round(_allResults.Average(AverageQuality), 2);
-        _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Uygun ASIN: {_allResults.Count} | Quality: {avgQuality:0.00} | Net: ${profit:0.00} | Süre: {FormatElapsed()}";
+        var usefulCount = _allResults.Count(IsUsefulCandidate);
+        _statusLabel.Text = $"Görünen: {_resultsGrid.Rows.Count} / Aday ASIN: {usefulCount} / Toplam: {_allResults.Count} | Quality: {avgQuality:0.00} | Net: ${profit:0.00} | Süre: {FormatElapsed()}";
     }
 
     private void RememberOutputFolder(SearchRunResult result)
