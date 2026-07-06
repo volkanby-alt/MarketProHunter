@@ -34,7 +34,6 @@ public sealed class MainForm : Form
     private readonly Button _rejectBrandButton = new();
     private readonly Button _openProductButton = new();
     private readonly Button _startButton = new();
-    private readonly Button _stopButton = new();
     private readonly ProgressBar _progressBar = new();
     private readonly TextBox _logTextBox = new();
     private readonly DataGridView _resultsGrid = new();
@@ -132,6 +131,8 @@ public sealed class MainForm : Form
         _parallelNumeric.Minimum = 1; _parallelNumeric.Maximum = 8; _parallelNumeric.Value = 3;
         _minPriceNumeric.Minimum = 1; _minPriceNumeric.Maximum = 1000; _minPriceNumeric.Value = 9;
         _maxPriceNumeric.Minimum = 1; _maxPriceNumeric.Maximum = 1000; _maxPriceNumeric.Value = 98;
+        _minPriceNumeric.ValueChanged += (_, _) => UpdateScanScopeLabel();
+        _maxPriceNumeric.ValueChanged += (_, _) => UpdateScanScopeLabel();
         _amazonChoiceCheckBox.Text = "Amazon Choice"; _amazonChoiceCheckBox.Checked = true;
         _lowStockCheckBox.Text = "Az stok ele"; _lowStockCheckBox.Checked = true;
         _usuallyKeepCheckBox.Text = "Usually keep ele"; _usuallyKeepCheckBox.Checked = false;
@@ -144,9 +145,8 @@ public sealed class MainForm : Form
         AddLabeledControl(panel, "Sayfa", _pagesNumeric, 4, 0);
         AddLabeledControl(panel, "ZIP", _zipTextBox, 5, 0);
         panel.Controls.Add(_amazonChoiceCheckBox, 6, 1); panel.Controls.Add(_lowStockCheckBox, 7, 1); panel.Controls.Add(_usuallyKeepCheckBox, 8, 1);
-        _startButton.Text = "▶ Taramayı Başlat"; _startButton.Height = 32; _startButton.Click += async (_, _) => await StartSearchAsync();
-        _stopButton.Text = "■ Durdur"; _stopButton.Height = 32; _stopButton.Enabled = false; _stopButton.Click += (_, _) => _cancellationTokenSource?.Cancel();
-        panel.Controls.Add(_startButton, 6, 0); panel.Controls.Add(_stopButton, 7, 0);
+        _startButton.Text = "▶ Taramayı Başlat"; _startButton.Height = 32; _startButton.Click += async (_, _) => await ToggleSearchAsync();
+        panel.Controls.Add(_startButton, 6, 0); panel.SetColumnSpan(_startButton, 2);
         _statusLabel.Text = "Hazır"; _statusLabel.AutoSize = true; panel.Controls.Add(_statusLabel, 8, 0);
 
         if (_categoryComboBox.Items.Count > 0) _categoryComboBox.SelectedIndex = 0;
@@ -241,6 +241,17 @@ public sealed class MainForm : Form
         _resultsGrid.Columns.Add("title", "Title"); _resultsGrid.Columns.Add("url", "URL");
     }
 
+    private async Task ToggleSearchAsync()
+    {
+        if (_cancellationTokenSource is not null)
+        {
+            _cancellationTokenSource.Cancel();
+            return;
+        }
+
+        await StartSearchAsync();
+    }
+
     private async Task StartSearchAsync()
     {
         var keywords = BuildKeywordList();
@@ -306,7 +317,15 @@ public sealed class MainForm : Form
 
     private void SetRunningState(bool running)
     {
-        _startButton.Enabled = !running; _stopButton.Enabled = running; _progressBar.Visible = running; _categoryComboBox.Enabled = !running; _subCategoryComboBox.Enabled = !running; _parallelNumeric.Enabled = !running; _minPriceNumeric.Enabled = !running; _maxPriceNumeric.Enabled = !running; _openOutputButton.Enabled = !running && HasOutputFolder();
+        _startButton.Enabled = true;
+        _startButton.Text = running ? "■ Durdur" : "▶ Taramayı Başlat";
+        _progressBar.Visible = running;
+        _categoryComboBox.Enabled = !running;
+        _subCategoryComboBox.Enabled = !running;
+        _parallelNumeric.Enabled = !running;
+        _minPriceNumeric.Enabled = !running;
+        _maxPriceNumeric.Enabled = !running;
+        _openOutputButton.Enabled = !running && HasOutputFolder();
         if (running) _statusLabel.Text = "Çalışıyor...";
     }
 
