@@ -9,6 +9,8 @@ namespace MarketProHunter.UI;
 
 public sealed class MainForm : Form
 {
+    private const int MaxLogLines = 500;
+
     private readonly ComboBox _categoryComboBox = new();
     private readonly ComboBox _subCategoryComboBox = new();
     private readonly NumericUpDown _pagesNumeric = new();
@@ -337,7 +339,16 @@ public sealed class MainForm : Form
         if (running) _statusLabel.Text = "Çalışıyor...";
     }
 
-    private void AppendLog(string message) => _logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
+    private void AppendLog(string message)
+    {
+        _logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
+
+        if (_logTextBox.Lines.Length <= MaxLogLines) return;
+
+        _logTextBox.Lines = _logTextBox.Lines.Skip(_logTextBox.Lines.Length - MaxLogLines).ToArray();
+        _logTextBox.SelectionStart = _logTextBox.TextLength;
+        _logTextBox.ScrollToCaret();
+    }
 
     private void AddProductRow(ProductResult product)
     {
