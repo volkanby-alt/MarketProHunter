@@ -17,7 +17,7 @@ public sealed class CsvExporter
         }
 
         var builder = new StringBuilder();
-        builder.AppendLine("DuplicateKey,UploadScore,UploadDecision,RiskLevel,SweetSpot,OpportunitySummary,TitleQualityScore,ImageQualityScore,ContentQualityScore,ListingQualityNotes,CompetitionScore,ConfidenceScore,VisualRiskLevel,VisualRiskNotes,ImageCount,ImageUrl1,ImageUrl2,ImageUrl3,ImageUrl4,ImageUrl5,ImageUrl6,OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,Rating,ReviewCount,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,LowStock,UsuallyKeep,ProductUrl,Keyword,Page,Notes");
+        builder.AppendLine("DuplicateKey,FinalScore,FinalDecision,FinalTier,FinalReason,UploadScore,UploadDecision,RiskLevel,SweetSpot,OpportunitySummary,TitleQualityScore,ImageQualityScore,ContentQualityScore,ListingQualityNotes,CompetitionScore,ConfidenceScore,VisualRiskLevel,VisualRiskNotes,ImageCount,ImageUrl1,ImageUrl2,ImageUrl3,ImageUrl4,ImageUrl5,ImageUrl6,OverallScore,SafetyScore,SalesScore,ProfitScore,Recommendation,Stars,Rating,ReviewCount,AmazonCost,RecommendedSalePrice,EbayFee,PromotedFee,NetProfit,NetMarginPercent,ProfitDecision,ASIN,Title,Brand,Price,Currency,AmazonChoice,Sponsored,LowStock,UsuallyKeep,ProductUrl,Keyword,Page,Notes");
 
         foreach (var p in products)
         {
@@ -36,7 +36,7 @@ public sealed class CsvExporter
         }
 
         var builder = new StringBuilder();
-        builder.AppendLine("Rank,Tier,DuplicateKey,UploadScore,UploadDecision,RiskLevel,SweetSpot,TitleQualityScore,ImageQualityScore,ContentQualityScore,ListingQualityNotes,CompetitionScore,ConfidenceScore,VisualRiskLevel,ImageCount,NetProfit,RecommendedSalePrice,ASIN,Brand,Title,ProductUrl,ImageUrl1,ImageUrl2,ImageUrl3,ImageUrl4,ImageUrl5,ImageUrl6,OpportunitySummary");
+        builder.AppendLine("Rank,Tier,DuplicateKey,FinalScore,FinalDecision,FinalTier,FinalReason,UploadScore,UploadDecision,RiskLevel,SweetSpot,TitleQualityScore,ImageQualityScore,ContentQualityScore,ListingQualityNotes,CompetitionScore,ConfidenceScore,VisualRiskLevel,ImageCount,NetProfit,RecommendedSalePrice,ASIN,Brand,Title,ProductUrl,ImageUrl1,ImageUrl2,ImageUrl3,ImageUrl4,ImageUrl5,ImageUrl6,OpportunitySummary");
 
         foreach (var item in queue.Items)
         {
@@ -46,6 +46,10 @@ public sealed class CsvExporter
                 item.Rank.ToString(CultureInfo.InvariantCulture),
                 Escape(item.Tier),
                 Escape(DuplicateKeyBuilder.Build(p)),
+                p.FinalScore.ToString(CultureInfo.InvariantCulture),
+                Escape(p.FinalDecision),
+                Escape(p.FinalTier),
+                Escape(p.FinalReason),
                 p.UploadScore.ToString(CultureInfo.InvariantCulture),
                 Escape(p.UploadDecision),
                 Escape(p.RiskLevel),
@@ -82,6 +86,10 @@ public sealed class CsvExporter
         return string.Join(',', new[]
         {
             Escape(DuplicateKeyBuilder.Build(p)),
+            p.FinalScore.ToString(CultureInfo.InvariantCulture),
+            Escape(p.FinalDecision),
+            Escape(p.FinalTier),
+            Escape(p.FinalReason),
             p.UploadScore.ToString(CultureInfo.InvariantCulture),
             Escape(p.UploadDecision),
             Escape(p.RiskLevel),
