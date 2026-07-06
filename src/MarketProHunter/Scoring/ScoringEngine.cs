@@ -124,11 +124,11 @@ public sealed class ScoringEngine
 
     private static string UploadDecisionFor(int uploadScore, int safetyScore, int confidenceScore, int competitionScore, ProductResult product)
     {
-        if (safetyScore < 60 || confidenceScore < 60 || uploadScore < 60) return "REJECT";
-        if (product.ImageCount < 4 && uploadScore >= 88) return "WATCH";
-        if (uploadScore >= 88 && safetyScore >= 80 && confidenceScore >= 82 && competitionScore <= 70) return "UPLOAD NOW";
-        if (uploadScore >= 74) return "WATCH";
-        return "REVIEW";
+        if (safetyScore < 60 || confidenceScore < 60 || uploadScore < 60) return "Reject";
+        if (product.ImageCount < 4 && uploadScore >= 88) return "Review";
+        if (uploadScore >= 88 && safetyScore >= 80 && confidenceScore >= 82 && competitionScore <= 70) return "Upload";
+        if (uploadScore >= 74) return "Review";
+        return "Caution";
     }
 
     private static string RecommendationFor(int overallScore, int safetyScore, int confidenceScore, int uploadScore, ProductResult product)
