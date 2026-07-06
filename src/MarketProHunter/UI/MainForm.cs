@@ -172,7 +172,7 @@ public sealed class MainForm : Form
         var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 10, RowCount = 1, Padding = new Padding(5) };
         for (var i = 0; i < 10; i++) panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10f));
         _recommendationFilter.DropDownStyle = ComboBoxStyle.DropDownList;
-        _recommendationFilter.Items.AddRange(new object[] { "Listele + İncele", "All", "Upload", "Review", "Caution", "Reject", "Favorite", "Profitable" });
+        _recommendationFilter.Items.AddRange(new object[] { "Listele + İncele", "All", "Buy Immediately", "Upload", "Review", "Watch", "Caution", "Reject", "Favorite", "Profitable" });
         _recommendationFilter.SelectedIndex = 0;
         _minOverallFilter.Minimum = 0; _minOverallFilter.Maximum = 100; _minOverallFilter.Value = 0;
         SetupMoneyNumeric(_ebayFeePercentNumeric, 0, 30, 13.25m);
@@ -239,9 +239,20 @@ public sealed class MainForm : Form
         _resultsGrid.Dock = DockStyle.Fill; _resultsGrid.ReadOnly = true; _resultsGrid.AllowUserToAddRows = false; _resultsGrid.AllowUserToDeleteRows = false;
         _resultsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; _resultsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _resultsGrid.SelectionChanged += (_, _) => ShowSelectedProductDetails();
-        _resultsGrid.Columns.Add("fav", "Fav"); _resultsGrid.Columns.Add("uploadDecision", "Karar"); _resultsGrid.Columns.Add("asin", "ASIN"); _resultsGrid.Columns.Add("brand", "Marka"); _resultsGrid.Columns.Add("price", "Amazon $");
-        _resultsGrid.Columns.Add("net", "Net $"); _resultsGrid.Columns.Add("margin", "Margin %"); _resultsGrid.Columns.Add("uploadScore", "Score"); _resultsGrid.Columns.Add("profitDecision", "Kâr"); _resultsGrid.Columns.Add("keyword", "Alt Arama");
-        _resultsGrid.Columns.Add("title", "Title"); _resultsGrid.Columns.Add("url", "URL");
+        _resultsGrid.Columns.Add("fav", "Fav");
+        _resultsGrid.Columns.Add("finalDecision", "Final");
+        _resultsGrid.Columns.Add("finalScore", "Final Score");
+        _resultsGrid.Columns.Add("uploadDecision", "Karar");
+        _resultsGrid.Columns.Add("asin", "ASIN");
+        _resultsGrid.Columns.Add("brand", "Marka");
+        _resultsGrid.Columns.Add("price", "Amazon $");
+        _resultsGrid.Columns.Add("net", "Net $");
+        _resultsGrid.Columns.Add("margin", "Margin %");
+        _resultsGrid.Columns.Add("uploadScore", "Upload Score");
+        _resultsGrid.Columns.Add("profitDecision", "Kâr");
+        _resultsGrid.Columns.Add("keyword", "Alt Arama");
+        _resultsGrid.Columns.Add("title", "Title");
+        _resultsGrid.Columns.Add("url", "URL");
     }
 
     private async Task ToggleSearchAsync()
@@ -305,23 +316,24 @@ public sealed class MainForm : Form
     {
         if (_decisionStore.IsRejected(product)) return false;
         var selected = _recommendationFilter.SelectedItem?.ToString() ?? "Listele + İncele";
-        if (selected == "Listele + İncele") return IsUsefulCandidate(product) && product.OverallScore >= _minOverallFilter.Value;
+        if (selected == "Listele + İncele") return IsUsefulCandidate(product) && product.FinalScore >= _minOverallFilter.Value;
         if (selected == "Favorite") return _decisionStore.IsFavorite(product.Asin);
         if (selected == "Profitable") return product.ProfitDecision.Equals("Profitable", StringComparison.OrdinalIgnoreCase);
-        if (selected != "All" && !product.Recommendation.Equals(selected, StringComparison.OrdinalIgnoreCase)) return false;
-        return product.OverallScore >= _minOverallFilter.Value;
+        if (selected != "All" && !product.FinalDecision.Equals(selected, StringComparison.OrdinalIgnoreCase) && !product.Recommendation.Equals(selected, StringComparison.OrdinalIgnoreCase)) return false;
+        return product.FinalScore >= _minOverallFilter.Value;
     }
 
     private static bool IsUsefulCandidate(ProductResult product)
     {
-        return !product.Recommendation.Equals("Reject", StringComparison.OrdinalIgnoreCase)
+        return !product.FinalDecision.Equals("Reject", StringComparison.OrdinalIgnoreCase)
+            && !product.Recommendation.Equals("Reject", StringComparison.OrdinalIgnoreCase)
             && !product.UploadDecision.Equals("Reject", StringComparison.OrdinalIgnoreCase);
     }
 
     private void RefreshGrid()
     {
         _resultsGrid.Rows.Clear();
-        foreach (var p in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.Recommendation.Equals("Upload", StringComparison.OrdinalIgnoreCase)).ThenByDescending(p => p.UploadScore).ThenByDescending(p => p.BrandScore).ThenByDescending(p => p.NetProfit).ThenByDescending(AverageQuality).ThenBy(p => p.CompetitionScore).ThenByDescending(p => p.ConfidenceScore)) AddProductRowToGrid(p);
+        foreach (var p in _allResults.Where(PassesCurrentFilter).OrderByDescending(p => p.FinalDecision.Equals("Buy Immediately", StringComparison.OrdinalIgnoreCase)).ThenByDescending(p => p.FinalScore).ThenByDescending(p => p.UploadScore).ThenByDescending(p => p.BrandScore).ThenByDescending(p => p.NetProfit).ThenByDescending(AverageQuality).ThenBy(p => p.CompetitionScore).ThenByDescending(p => p.ConfidenceScore)) AddProductRowToGrid(p);
         UpdateLiveStatus();
     }
 
@@ -360,9 +372,22 @@ public sealed class MainForm : Form
 
     private void AddProductRowToGrid(ProductResult product)
     {
-        var index = _resultsGrid.Rows.Add(_decisionStore.IsFavorite(product.Asin) ? "⭐" : "", ToSimpleDecision(product), product.Asin, product.Brand, $"${product.Price}", $"${product.NetProfit}", product.NetMarginPercent, product.UploadScore, product.ProfitDecision, product.SearchKeyword, product.Title, product.ProductUrl);
+        var index = _resultsGrid.Rows.Add(_decisionStore.IsFavorite(product.Asin) ? "⭐" : "", ToFinalDecisionText(product), product.FinalScore, ToSimpleDecision(product), product.Asin, product.Brand, $"${product.Price}", $"${product.NetProfit}", product.NetMarginPercent, product.UploadScore, product.ProfitDecision, product.SearchKeyword, product.Title, product.ProductUrl);
         var row = _resultsGrid.Rows[index]; row.Tag = product;
-        row.DefaultCellStyle.BackColor = product.UploadScore switch { >= 88 => Color.Honeydew, >= 74 => Color.LightYellow, >= 60 => Color.Moccasin, _ => Color.MistyRose };
+        row.DefaultCellStyle.BackColor = product.FinalScore switch { >= 93 => Color.Honeydew, >= 86 => Color.LightGreen, >= 74 => Color.LightYellow, >= 65 => Color.Moccasin, _ => Color.MistyRose };
+    }
+
+    private static string ToFinalDecisionText(ProductResult product)
+    {
+        return product.FinalDecision switch
+        {
+            "Buy Immediately" => "🟢 Kaçırma",
+            "Upload" => "🟢 Listele",
+            "Review" => "🟡 İncele",
+            "Watch" => "🟠 İzle",
+            "Reject" => "🔴 Geç",
+            _ => string.IsNullOrWhiteSpace(product.FinalDecision) ? ToSimpleDecision(product) : product.FinalDecision
+        };
     }
 
     private static string ToSimpleDecision(ProductResult product)
@@ -449,6 +474,8 @@ public sealed class MainForm : Form
     {
         var reasons = new List<string> { p.IsAmazonChoice ? "+ Amazon Choice" : "- Amazon Choice değil", p.HasLowStockWarning ? "- Stok az uyarısı var" : "+ Stok uyarısı yok", p.HasUsuallyKeepItemText ? "+ Usually keep bilgisi var" : "+ Usually keep bilgisi yok", p.IsSponsored ? "- Sponsored sonuç" : "+ Organic sonuç", p.Price <= 60 ? "+ Amazon fiyatı iyi aralıkta" : "- Amazon fiyatı üst aralıkta", p.Rating >= 4.3m ? "+ Rating güçlü" : "- Rating zayıf veya okunamadı", p.ReviewCount >= 100 ? "+ Yorum sayısı güven veriyor" : "- Yorum sayısı düşük veya okunamadı", p.CompetitionScore <= 45 ? "+ Rekabet düşük/orta" : "- Rekabet yüksek olabilir", p.ImageCount >= 4 ? "+ Görsel seti yeterli" : "- Görsel sayısı eksik", p.VisualRiskLevel == "LOW" ? "+ Görsel risk düşük" : "- Görsel kontrol gerekli", p.BrandScore >= 70 ? "+ Marka riski kabul edilebilir" : "- Marka riski kontrol edilmeli", p.UploadScore >= 88 ? "+ Upload Score güçlü" : "- Upload Score izleme gerektiriyor", p.ProfitDecision == "Profitable" ? "+ eBay kâr hedefini karşılıyor" : "- eBay kârı düşük" };
         return $"Favorite: {(isFavorite ? "YES ⭐" : "NO")}{Environment.NewLine}" +
+               $"FINAL: {ToFinalDecisionText(p)} | Score: {p.FinalScore}/100 | Tier: {p.FinalTier}{Environment.NewLine}" +
+               $"Final Reason: {p.FinalReason}{Environment.NewLine}" +
                $"KARAR: {ToSimpleDecision(p)}{Environment.NewLine}Upload Score: {p.UploadScore}/100 | Brand Score: {p.BrandScore}/100 {p.BrandLevel} | Competition: {p.CompetitionScore}/100{Environment.NewLine}" +
                $"Brand Action: {p.BrandAction} | Brand Notes: {p.BrandProfileNotes}{Environment.NewLine}" +
                $"Listing Quality: Title {p.TitleQualityScore}/100 | Images {p.ImageQualityScore}/100 | Content {p.ContentQualityScore}/100{Environment.NewLine}" +
