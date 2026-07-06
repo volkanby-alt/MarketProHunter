@@ -121,6 +121,14 @@ public sealed class AmazonSearchService
                         var brandProfile = brandEngine.Analyze(product.Brand);
                         var score = scoringEngine.Score(product);
                         var quality = listingQualityAnalyzer.Analyze(product);
+
+                        if (brandProfile.Recommendation.Equals("REJECT", StringComparison.OrdinalIgnoreCase) || score.UploadDecision.Equals("Reject", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Interlocked.Increment(ref skippedCount);
+                            logProgress?.Report($"SKIP {product.Asin} | erken eleme | Brand {brandProfile.RiskScore} {brandProfile.RiskLevel} | Upload {score.UploadScore}");
+                            continue;
+                        }
+
                         var pageData = await FetchAndParseProductPageAsync(client, productPageParser, product, logProgress, token);
                         if (pageData.BulletPointCount == 0 && pageData.SpecificationCount == 0 && string.IsNullOrWhiteSpace(pageData.Description))
                         {
