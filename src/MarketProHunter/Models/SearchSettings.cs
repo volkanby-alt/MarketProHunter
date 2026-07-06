@@ -10,8 +10,8 @@ public sealed record SearchSettings
     public bool ExcludeLowStock { get; init; } = true;
     public bool ExcludeUsuallyKeepItem { get; init; } = false;
     public bool ExcludeSponsored { get; init; } = true;
-    public int DelayBetweenPagesMs { get; init; } = 2500;
-    public int MaxParallelSearches { get; init; } = 3;
+    public int DelayBetweenPagesMs { get; init; } = 3200;
+    public int MaxParallelSearches { get; init; } = 2;
 
     public static SearchSettings Default => new();
 }
