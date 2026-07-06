@@ -129,7 +129,7 @@ public sealed class MainForm : Form
 
         _zipTextBox.Text = "07073";
         _pagesNumeric.Minimum = 1; _pagesNumeric.Maximum = 100; _pagesNumeric.Value = 3;
-        _parallelNumeric.Minimum = 1; _parallelNumeric.Maximum = 8; _parallelNumeric.Value = 3;
+        _parallelNumeric.Minimum = 1; _parallelNumeric.Maximum = 8; _parallelNumeric.Value = 2;
         _minPriceNumeric.Minimum = 1; _minPriceNumeric.Maximum = 1000; _minPriceNumeric.Value = 9;
         _maxPriceNumeric.Minimum = 1; _maxPriceNumeric.Maximum = 1000; _maxPriceNumeric.Value = 98;
         _minPriceNumeric.ValueChanged += (_, _) => UpdateScanScopeLabel();
