@@ -1,15 +1,34 @@
 # Brand,RiskScore,RiskLevel,Recommendation,Notes
+# RiskScore: 0=safest, 100=highest risk.
+# RiskLevel: LOW, MEDIUM, HIGH, VERY_HIGH.
+# Recommendation: ALLOW, REVIEW, REJECT.
 LEGO,99,VERY_HIGH,REJECT,High trademark and brand protection risk.
 NIKE,98,VERY_HIGH,REJECT,High brand protection risk.
 ADIDAS,98,VERY_HIGH,REJECT,High brand protection risk.
 APPLE,98,VERY_HIGH,REJECT,High trademark and compatibility risk.
+DISNEY,99,VERY_HIGH,REJECT,Very high character and IP enforcement risk.
+MARVEL,99,VERY_HIGH,REJECT,Very high character and IP enforcement risk.
+NINTENDO,98,VERY_HIGH,REJECT,High IP and marketplace enforcement risk.
+DYSON,96,VERY_HIGH,REJECT,Strong brand protection risk; avoid without authorization.
 SAMSUNG,95,VERY_HIGH,REJECT,High trademark and compatibility risk.
+SONY,90,HIGH,REJECT,Major electronics brand with elevated IP and warranty risk.
+MICROSOFT,88,HIGH,REJECT,Major software/electronics brand; avoid without authorization.
 MILWAUKEE,92,VERY_HIGH,REJECT,Strong brand protection concern.
 DEWALT,82,HIGH,REVIEW,Tool brand; review carefully before upload.
 STANLEY,70,HIGH,REVIEW,Popular brand with elevated competition and brand risk.
 BLACK+DECKER,75,HIGH,REVIEW,Tool brand; review carefully.
+HP,82,HIGH,REVIEW,Major electronics and printer brand; toner and parts can be sensitive.
+DELL,80,HIGH,REVIEW,Major electronics brand; warranty and compatibility claims require care.
+CANON,86,HIGH,REVIEW,Printer/camera brand; ink and accessories can be sensitive.
+BROTHER,84,HIGH,REVIEW,Printer brand; toner and parts can be sensitive.
+3M,85,HIGH,REVIEW,Major industrial/healthcare brand; safety and authenticity risk.
+SHARK,74,MEDIUM,REVIEW,Recognized appliance brand; review authorization and warranty language.
 SIMPLE MODERN,18,LOW,REVIEW,Generally lower risk but still review product details.
 VEVOR,20,LOW,REVIEW,Generally lower risk but check category and warranty language.
 DELPHI,35,MEDIUM,REVIEW,Automotive brand; review compatibility wording.
 MR. CLEAN,72,HIGH,REVIEW,Household brand; review brand usage carefully.
+MR CLEAN,72,HIGH,REVIEW,Household brand; review brand usage carefully.
 MRS. MEYER'S,70,HIGH,REVIEW,Household brand; review brand usage carefully.
+MRS MEYERS,70,HIGH,REVIEW,Household brand; review brand usage carefully.
+GENERIC,15,LOW,ALLOW,Generic or unbranded item profile.
+UNBRANDED,15,LOW,ALLOW,Unbranded item profile.
