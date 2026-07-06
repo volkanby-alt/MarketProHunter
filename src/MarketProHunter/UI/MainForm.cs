@@ -42,6 +42,7 @@ public sealed class MainForm : Form
     private readonly Label _scanScopeLabel = new();
     private readonly IReadOnlyList<KeywordCategory> _categories = KeywordCategoryProvider.GetDefaultCategories();
     private readonly List<ProductResult> _allResults = new();
+    private readonly HashSet<string> _seenAsins = new(StringComparer.OrdinalIgnoreCase);
     private readonly UserDecisionStore _decisionStore = new();
     private CancellationTokenSource? _cancellationTokenSource;
     private Stopwatch? _runTimer;
@@ -258,7 +259,7 @@ public sealed class MainForm : Form
         if (keywords.Count == 0) { MessageBox.Show("Önce bir kategori ve alt kategori seçin.", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         if (_minPriceNumeric.Value > _maxPriceNumeric.Value) { MessageBox.Show("Minimum fiyat, maksimum fiyattan büyük olamaz.", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         UpdateScanScopeLabel();
-        _allResults.Clear(); _resultsGrid.Rows.Clear(); _logTextBox.Clear(); _detailTextBox.Text = "Tarama başladı...";
+        _allResults.Clear(); _seenAsins.Clear(); _resultsGrid.Rows.Clear(); _logTextBox.Clear(); _detailTextBox.Text = "Tarama başladı...";
         _runTimer = Stopwatch.StartNew();
         AppendLog($"Kategori: {GetSelectedCategoryName()} | Alt kategori: {GetSelectedSubCategoryName()}");
         AppendLog($"Fiyat aralığı: ${_minPriceNumeric.Value:0.##} - ${_maxPriceNumeric.Value:0.##}");
@@ -341,6 +342,7 @@ public sealed class MainForm : Form
     private void AddProductRow(ProductResult product)
     {
         if (_decisionStore.IsRejected(product)) { AppendLog($"SKIP {product.Asin} | Kullanıcı kara listesinde"); return; }
+        if (string.IsNullOrWhiteSpace(product.Asin) || !_seenAsins.Add(product.Asin)) return;
         _allResults.Add(product); if (PassesCurrentFilter(product)) AddProductRowToGrid(product);
         UpdateLiveStatus();
     }
