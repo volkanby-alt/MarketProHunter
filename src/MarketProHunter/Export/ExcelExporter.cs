@@ -50,7 +50,7 @@ public sealed class ExcelExporter
         if (includeRank) headers.Add("Rank");
         headers.AddRange(new[]
         {
-            "UploadScore", "Decision", "Tier", "ASIN", "Brand", "Title", "AmazonCost", "eBaySell", "NetProfit", "Margin%",
+            "FinalScore", "FinalDecision", "FinalTier", "FinalReason", "UploadScore", "Decision", "QueueTier", "ASIN", "Brand", "Title", "AmazonCost", "eBaySell", "NetProfit", "Margin%",
             "TitleQ", "ImageQ", "ContentQ", "BulletQ", "DescriptionQ", "SpecsQ", "BulletCount", "SpecCount", "A+Content",
             "Competition", "Confidence", "Rating", "Reviews", "Keyword", "ProductUrl", "Image1", "QualityNotes", "PageNotes"
         });
@@ -63,6 +63,10 @@ public sealed class ExcelExporter
             if (includeRank) row.Add(i + 1);
             row.AddRange(new object?[]
             {
+                p.FinalScore,
+                p.FinalDecision,
+                p.FinalTier,
+                p.FinalReason,
                 p.UploadScore,
                 p.UploadDecision,
                 includeRank && smartQueue is not null && i < smartQueue.Items.Count ? smartQueue.Items[i].Tier : string.Empty,
@@ -101,6 +105,9 @@ public sealed class ExcelExporter
     private static string BuildSummarySheet(IReadOnlyList<ProductResult> products, SmartQueueResult smartQueue)
     {
         var upload90 = products.Count(x => x.UploadScore >= 90);
+        var final90 = products.Count(x => x.FinalScore >= 90);
+        var buyNow = products.Count(x => x.FinalDecision.Equals("Buy Immediately", StringComparison.OrdinalIgnoreCase));
+        var avgFinal = products.Count == 0 ? 0m : Math.Round(products.Average(x => x.FinalScore), 2);
         var avgNet = products.Count == 0 ? 0m : Math.Round(products.Average(x => x.NetProfit), 2);
         var avgMargin = products.Count == 0 ? 0m : Math.Round(products.Average(x => x.NetMarginPercent), 2);
         var avgQuality = products.Count == 0 ? 0m : Math.Round(products.Average(AverageQuality), 2);
@@ -110,8 +117,11 @@ public sealed class ExcelExporter
             new object?[] { "Accepted Products", products.Count },
             new object?[] { "Smart Queue Target", smartQueue.RequestedCount },
             new object?[] { "Smart Queue Selected", smartQueue.SelectedCount },
+            new object?[] { "Buy Immediately", buyNow },
+            new object?[] { "Final Score 90+", final90 },
             new object?[] { "Upload Score 90+", upload90 },
             new object?[] { "Expected Net Profit", smartQueue.ExpectedNetProfit },
+            new object?[] { "Average Final Score", avgFinal },
             new object?[] { "Average Net Profit", avgNet },
             new object?[] { "Average Margin %", avgMargin },
             new object?[] { "Average Upload Score", smartQueue.AverageUploadScore },
@@ -119,9 +129,16 @@ public sealed class ExcelExporter
             new object?[] { "Average Listing Quality", avgQuality },
             new object?[] { "Generated", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) },
             new object?[] { "", "" },
-            new object?[] { "Top Keywords", "Accepted Count" }
+            new object?[] { "Top Final Decisions", "Accepted Count" }
         };
 
+        foreach (var group in products.GroupBy(x => string.IsNullOrWhiteSpace(x.FinalDecision) ? "Unknown" : x.FinalDecision).OrderByDescending(g => g.Count()).Take(10))
+        {
+            rows.Add(new object?[] { group.Key, group.Count() });
+        }
+
+        rows.Add(new object?[] { "", "" });
+        rows.Add(new object?[] { "Top Keywords", "Accepted Count" });
         foreach (var group in products.GroupBy(x => x.SearchKeyword).OrderByDescending(g => g.Count()).Take(20))
         {
             rows.Add(new object?[] { group.Key, group.Count() });
@@ -151,7 +168,7 @@ public sealed class ExcelExporter
         if (freezeTopRow) builder.Append("<pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/>");
         builder.Append("</sheetView></sheetViews>");
         builder.Append("<sheetFormatPr defaultRowHeight=\"15\"/>");
-        builder.Append("<cols><col min=\"1\" max=\"1\" width=\"12\" customWidth=\"1\"/><col min=\"2\" max=\"30\" width=\"18\" customWidth=\"1\"/></cols>");
+        builder.Append("<cols><col min=\"1\" max=\"1\" width=\"12\" customWidth=\"1\"/><col min=\"2\" max=\"34\" width=\"18\" customWidth=\"1\"/></cols>");
         builder.Append("<sheetData>");
 
         for (var r = 0; r < rows.Count; r++)
