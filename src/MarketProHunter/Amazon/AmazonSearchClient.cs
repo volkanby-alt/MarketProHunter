@@ -40,7 +40,7 @@ public sealed class AmazonSearchClient : IDisposable
         return $"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/s?k={encodedKeyword}&page={page}&rh=p_36%3A{min}-{max}&language=en_US&currency=USD";
     }
 
-    public Task<string> FetchSearchPageAsync(string keyword, int page, CancellationToken cancellationToken = default)
+    public async Task<string> FetchSearchPageAsync(string keyword, int page, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureSession();
@@ -61,9 +61,17 @@ public sealed class AmazonSearchClient : IDisposable
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        TrySetStatusTitle(keyword, page);
+
         var html = _driver.PageSource;
         ThrowIfBlocked(html);
-        return Task.FromResult(html);
+
+        if (_settings.DelayBetweenPagesMs > 0)
+        {
+            await Task.Delay(_settings.DelayBetweenPagesMs, cancellationToken);
+        }
+
+        return html;
     }
 
     public Task<string> FetchProductPageAsync(string productUrl, CancellationToken cancellationToken = default)
@@ -110,6 +118,11 @@ public sealed class AmazonSearchClient : IDisposable
                     By.Id("nav-global-location-data-modal-action"),
                     By.CssSelector("a[data-csa-c-content-id='nav-global-location']")));
 
+            if (locationButton is null)
+            {
+                throw new WebDriverTimeoutException("Teslimat konumu düğmesi bulunamadı.");
+            }
+
             ClickElement(locationButton);
 
             var zipInput = _wait.Until(driver =>
@@ -117,6 +130,11 @@ public sealed class AmazonSearchClient : IDisposable
                     By.Id("GLUXZipUpdateInput"),
                     By.CssSelector("input[data-action='GLUXPostalInputAction']"),
                     By.CssSelector("input[placeholder*='ZIP']")));
+
+            if (zipInput is null)
+            {
+                throw new WebDriverTimeoutException("ZIP giriş alanı bulunamadı.");
+            }
 
             zipInput.Clear();
             zipInput.SendKeys(zip);
@@ -127,6 +145,11 @@ public sealed class AmazonSearchClient : IDisposable
                     By.Id("GLUXZipUpdate"),
                     By.CssSelector("span[data-action='GLUXPostalUpdateAction'] input")));
 
+            if (applyButton is null)
+            {
+                throw new WebDriverTimeoutException("ZIP uygulama düğmesi bulunamadı.");
+            }
+
             ClickElement(applyButton);
 
             try
@@ -136,20 +159,12 @@ public sealed class AmazonSearchClient : IDisposable
                         By.CssSelector("#GLUXConfirmClose input.a-button-input"),
                         By.Id("GLUXConfirmClose"),
                         By.CssSelector("button[name='glowDoneButton']")));
-                ClickElement(closeButton);
+                if (closeButton is not null) ClickElement(closeButton);
             }
             catch (WebDriverTimeoutException)
             {
                 // Some Amazon layouts close the modal automatically.
             }
-
-            _wait.Until(driver =>
-            {
-                var text = ReadLocationText(driver);
-                return text.Contains(zip, StringComparison.OrdinalIgnoreCase)
-                    || text.Contains("New Jersey", StringComparison.OrdinalIgnoreCase)
-                    || !driver.FindElements(By.Id("GLUXZipUpdateInput")).Any(x => x.Displayed);
-            });
 
             _driver.Navigate().Refresh();
             WaitForDocumentReady();
@@ -159,6 +174,20 @@ public sealed class AmazonSearchClient : IDisposable
             throw new InvalidOperationException(
                 $"Amazon teslimat adresi {zip} olarak ayarlanamadı. Açılan Chrome penceresinde 'Deliver to' bölümünü kontrol edin. Ayrıntı: {ex.Message}",
                 ex);
+        }
+    }
+
+    private void TrySetStatusTitle(string keyword, int page)
+    {
+        try
+        {
+            ((IJavaScriptExecutor)_driver).ExecuteScript(
+                "document.title = arguments[0];",
+                $"MarketProHunter | {keyword} | Sayfa {page}");
+        }
+        catch (WebDriverException)
+        {
+            // The address bar still shows the exact search URL.
         }
     }
 
@@ -183,21 +212,6 @@ public sealed class AmazonSearchClient : IDisposable
         {
             ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", element);
         }
-    }
-
-    private static string ReadLocationText(IWebDriver driver)
-    {
-        var selectors = new[]
-        {
-            By.Id("glow-ingress-line1"),
-            By.Id("glow-ingress-line2"),
-            By.Id("nav-global-location-data-modal-action")
-        };
-
-        return string.Join(" ", selectors
-            .SelectMany(driver.FindElements)
-            .Where(x => x.Displayed)
-            .Select(x => x.Text));
     }
 
     private void WaitForDocumentReady()
