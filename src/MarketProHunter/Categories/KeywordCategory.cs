@@ -10,10 +10,23 @@ public sealed record KeywordCategory(
         .ToList();
 }
 
-public sealed record KeywordSubCategory(
-    string Name,
-    IReadOnlyList<string> Keywords,
-    IReadOnlyList<string> Markets)
+public sealed record KeywordSubCategory
 {
+    public KeywordSubCategory(string name, IReadOnlyList<string> keywords)
+        : this(name, keywords, Array.Empty<string>())
+    {
+    }
+
+    public KeywordSubCategory(string name, IReadOnlyList<string> keywords, IReadOnlyList<string> markets)
+    {
+        Name = name;
+        Keywords = keywords;
+        Markets = markets;
+    }
+
+    public string Name { get; }
+    public IReadOnlyList<string> Keywords { get; }
+    public IReadOnlyList<string> Markets { get; }
+
     public override string ToString() => Name;
 }
