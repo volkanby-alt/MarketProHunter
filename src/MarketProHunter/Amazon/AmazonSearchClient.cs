@@ -18,19 +18,20 @@ public sealed class AmazonSearchClient : IDisposable
 
         var options = new ChromeOptions();
         options.AddArgument("--start-maximized");
-        options.AddArgument("--disable-blink-features=AutomationControlled");
         options.AddArgument("--disable-notifications");
         options.AddArgument("--disable-popup-blocking");
         options.AddArgument("--lang=en-US");
         options.AddArgument("--no-default-browser-check");
         options.AddArgument("--disable-search-engine-choice-screen");
-        options.AddExcludedArgument("enable-automation");
-        options.AddAdditionalOption("useAutomationExtension", false);
 
         _driver = new ChromeDriver(options);
         _driver.Manage().Timeouts().PageLoad = TimeSpan.FromSeconds(60);
-        _driver.Manage().Timeouts().AsynchronousJavaScript = TimeSpan.FromSeconds(30);
-        _wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(25));
+        _wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(30));
+
+        // ChromeDriver first opens data:,. Navigate immediately so the user can
+        // verify that the real Amazon session has started.
+        _driver.Navigate().GoToUrl($"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/?language=en_US&currency=USD");
+        WaitForDocumentReady();
     }
 
     public string BuildSearchUrl(string keyword, int page)
@@ -41,74 +42,61 @@ public sealed class AmazonSearchClient : IDisposable
         return $"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/s?k={encodedKeyword}&page={page}&rh=p_36%3A{min}-{max}&language=en_US&currency=USD";
     }
 
-    public async Task<string> FetchSearchPageAsync(string keyword, int page, CancellationToken cancellationToken = default)
+    public Task<string> FetchSearchPageAsync(string keyword, int page, CancellationToken cancellationToken = default)
     {
-        await EnsureSessionAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureSession();
+
         var url = BuildSearchUrl(keyword, page);
-        return await NavigateAndReadAsync(url, waitForSearchResults: true, cancellationToken);
+        _driver.Navigate().GoToUrl(url);
+        WaitForDocumentReady();
+
+        try
+        {
+            _wait.Until(driver =>
+                driver.FindElements(By.CssSelector("div[data-component-type='s-search-result']")).Count > 0
+                || LooksBlocked(driver.PageSource));
+        }
+        catch (WebDriverTimeoutException)
+        {
+            // Return the page source so the caller can log the failure reason.
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var html = _driver.PageSource;
+        ThrowIfBlocked(html);
+        return Task.FromResult(html);
     }
 
-    public async Task<string> FetchProductPageAsync(string productUrl, CancellationToken cancellationToken = default)
+    public Task<string> FetchProductPageAsync(string productUrl, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(productUrl)) return string.Empty;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(productUrl)) return Task.FromResult(string.Empty);
 
-        await EnsureSessionAsync(cancellationToken);
+        EnsureSession();
         var url = productUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
             ? productUrl
             : $"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/{productUrl.TrimStart('/')}";
 
-        return await NavigateAndReadAsync(url, waitForSearchResults: false, cancellationToken);
+        _driver.Navigate().GoToUrl(url);
+        WaitForDocumentReady();
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var html = _driver.PageSource;
+        ThrowIfBlocked(html);
+        return Task.FromResult(html);
     }
 
-    private async Task EnsureSessionAsync(CancellationToken cancellationToken)
+    private void EnsureSession()
     {
         if (_sessionInitialized) return;
 
-        await Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            _driver.Navigate().GoToUrl($"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/?language=en_US&currency=USD");
-            WaitForDocumentReady();
-
-            AddOrReplaceCookie("lc-main", "en_US");
-            AddOrReplaceCookie("i18n-prefs", "USD");
-            AddOrReplaceCookie("zip-main", string.IsNullOrWhiteSpace(_settings.ZipCode) ? "07073" : _settings.ZipCode.Trim());
-
-            _sessionInitialized = true;
-        }, cancellationToken);
-    }
-
-    private async Task<string> NavigateAndReadAsync(string url, bool waitForSearchResults, CancellationToken cancellationToken)
-    {
-        return await Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            _driver.Navigate().GoToUrl(url);
-            WaitForDocumentReady();
-
-            if (waitForSearchResults)
-            {
-                try
-                {
-                    _wait.Until(driver =>
-                        driver.FindElements(By.CssSelector("div[data-component-type='s-search-result']")).Count > 0
-                        || LooksBlocked(driver.PageSource));
-                }
-                catch (WebDriverTimeoutException)
-                {
-                    // The caller will inspect the returned HTML and report that no cards were found.
-                }
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            var html = _driver.PageSource;
-            if (LooksBlocked(html))
-            {
-                throw new InvalidOperationException("Amazon robot kontrolü gösterdi. Açılan Chrome penceresinde kontrolü tamamlayıp taramayı yeniden başlatın.");
-            }
-
-            return html;
-        }, cancellationToken);
+        AddOrReplaceCookie("lc-main", "en_US");
+        AddOrReplaceCookie("i18n-prefs", "USD");
+        AddOrReplaceCookie("zip-main", string.IsNullOrWhiteSpace(_settings.ZipCode) ? "07073" : _settings.ZipCode.Trim());
+        _driver.Navigate().Refresh();
+        WaitForDocumentReady();
+        _sessionInitialized = true;
     }
 
     private void WaitForDocumentReady()
@@ -117,10 +105,10 @@ public sealed class AmazonSearchClient : IDisposable
         {
             try
             {
-                return ((IJavaScriptExecutor)driver)
-                    .ExecuteScript("return document.readyState")
-                    ?.ToString()
-                    ?.Equals("complete", StringComparison.OrdinalIgnoreCase) == true;
+                return string.Equals(
+                    ((IJavaScriptExecutor)driver).ExecuteScript("return document.readyState")?.ToString(),
+                    "complete",
+                    StringComparison.OrdinalIgnoreCase);
             }
             catch (WebDriverException)
             {
@@ -138,7 +126,15 @@ public sealed class AmazonSearchClient : IDisposable
         }
         catch (WebDriverException)
         {
-            // Locale cookies are helpful but not required for the scan to continue.
+            // Locale cookies are optional. Continue with Amazon defaults.
+        }
+    }
+
+    private static void ThrowIfBlocked(string html)
+    {
+        if (LooksBlocked(html))
+        {
+            throw new InvalidOperationException("Amazon robot kontrolü gösterdi. Açılan Chrome penceresinde kontrolü tamamlayıp taramayı yeniden başlatın.");
         }
     }
 
