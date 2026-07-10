@@ -11,7 +11,7 @@ public sealed record SearchSettings
     public bool ExcludeUsuallyKeepItem { get; init; } = false;
     public bool ExcludeSponsored { get; init; } = true;
     public int DelayBetweenPagesMs { get; init; } = 3200;
-    public int MaxParallelSearches { get; init; } = 2;
+    public int MaxParallelSearches { get; init; } = 1;
 
     public static SearchSettings Default => new();
 }
