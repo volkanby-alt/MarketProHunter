@@ -16,6 +16,12 @@ public sealed class AmazonSearchClient : IDisposable
     {
         _settings = settings;
 
+        var profilePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MarketProHunter",
+            "ChromeProfile");
+        Directory.CreateDirectory(profilePath);
+
         var options = new ChromeOptions();
         options.AddArgument("--start-maximized");
         options.AddArgument("--disable-notifications");
@@ -23,6 +29,8 @@ public sealed class AmazonSearchClient : IDisposable
         options.AddArgument("--lang=en-US");
         options.AddArgument("--no-default-browser-check");
         options.AddArgument("--disable-search-engine-choice-screen");
+        options.AddArgument($"--user-data-dir={profilePath}");
+        options.AddArgument("--profile-directory=Default");
 
         _driver = new ChromeDriver(options);
         _driver.Manage().Timeouts().PageLoad = TimeSpan.FromSeconds(60);
@@ -102,8 +110,19 @@ public sealed class AmazonSearchClient : IDisposable
         _driver.Navigate().Refresh();
         WaitForDocumentReady();
 
-        SetDeliveryZipCode();
+        if (!IsDeliveryZipAlreadySet())
+        {
+            SetDeliveryZipCode();
+        }
+
         _sessionInitialized = true;
+    }
+
+    private bool IsDeliveryZipAlreadySet()
+    {
+        var zip = string.IsNullOrWhiteSpace(_settings.ZipCode) ? "07073" : _settings.ZipCode.Trim();
+        var locationText = ReadLocationText(_driver);
+        return locationText.Contains(zip, StringComparison.OrdinalIgnoreCase);
     }
 
     private void SetDeliveryZipCode()
@@ -212,6 +231,21 @@ public sealed class AmazonSearchClient : IDisposable
         {
             ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", element);
         }
+    }
+
+    private static string ReadLocationText(IWebDriver driver)
+    {
+        var selectors = new[]
+        {
+            By.Id("glow-ingress-line1"),
+            By.Id("glow-ingress-line2"),
+            By.Id("nav-global-location-data-modal-action")
+        };
+
+        return string.Join(" ", selectors
+            .SelectMany(driver.FindElements)
+            .Where(x => x.Displayed)
+            .Select(x => x.Text));
     }
 
     private void WaitForDocumentReady()
