@@ -28,8 +28,6 @@ public sealed class AmazonSearchClient : IDisposable
         _driver.Manage().Timeouts().PageLoad = TimeSpan.FromSeconds(60);
         _wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(30));
 
-        // ChromeDriver first opens data:,. Navigate immediately so the user can
-        // verify that the real Amazon session has started.
         _driver.Navigate().GoToUrl($"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/?language=en_US&currency=USD");
         WaitForDocumentReady();
     }
@@ -59,7 +57,7 @@ public sealed class AmazonSearchClient : IDisposable
         }
         catch (WebDriverTimeoutException)
         {
-            // Return the page source so the caller can log the failure reason.
+            // The caller will report that no cards were found.
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -93,10 +91,113 @@ public sealed class AmazonSearchClient : IDisposable
 
         AddOrReplaceCookie("lc-main", "en_US");
         AddOrReplaceCookie("i18n-prefs", "USD");
-        AddOrReplaceCookie("zip-main", string.IsNullOrWhiteSpace(_settings.ZipCode) ? "07073" : _settings.ZipCode.Trim());
         _driver.Navigate().Refresh();
         WaitForDocumentReady();
+
+        SetDeliveryZipCode();
         _sessionInitialized = true;
+    }
+
+    private void SetDeliveryZipCode()
+    {
+        var zip = string.IsNullOrWhiteSpace(_settings.ZipCode) ? "07073" : _settings.ZipCode.Trim();
+
+        try
+        {
+            var locationButton = _wait.Until(driver =>
+                FirstDisplayed(driver,
+                    By.Id("nav-global-location-popover-link"),
+                    By.Id("nav-global-location-data-modal-action"),
+                    By.CssSelector("a[data-csa-c-content-id='nav-global-location']")));
+
+            ClickElement(locationButton);
+
+            var zipInput = _wait.Until(driver =>
+                FirstDisplayed(driver,
+                    By.Id("GLUXZipUpdateInput"),
+                    By.CssSelector("input[data-action='GLUXPostalInputAction']"),
+                    By.CssSelector("input[placeholder*='ZIP']")));
+
+            zipInput.Clear();
+            zipInput.SendKeys(zip);
+
+            var applyButton = _wait.Until(driver =>
+                FirstDisplayed(driver,
+                    By.CssSelector("#GLUXZipUpdate input.a-button-input"),
+                    By.Id("GLUXZipUpdate"),
+                    By.CssSelector("span[data-action='GLUXPostalUpdateAction'] input")));
+
+            ClickElement(applyButton);
+
+            try
+            {
+                var closeButton = new WebDriverWait(_driver, TimeSpan.FromSeconds(8)).Until(driver =>
+                    FirstDisplayed(driver,
+                        By.CssSelector("#GLUXConfirmClose input.a-button-input"),
+                        By.Id("GLUXConfirmClose"),
+                        By.CssSelector("button[name='glowDoneButton']")));
+                ClickElement(closeButton);
+            }
+            catch (WebDriverTimeoutException)
+            {
+                // Some Amazon layouts close the modal automatically.
+            }
+
+            _wait.Until(driver =>
+            {
+                var text = ReadLocationText(driver);
+                return text.Contains(zip, StringComparison.OrdinalIgnoreCase)
+                    || text.Contains("New Jersey", StringComparison.OrdinalIgnoreCase)
+                    || !driver.FindElements(By.Id("GLUXZipUpdateInput")).Any(x => x.Displayed);
+            });
+
+            _driver.Navigate().Refresh();
+            WaitForDocumentReady();
+        }
+        catch (WebDriverException ex)
+        {
+            throw new InvalidOperationException(
+                $"Amazon teslimat adresi {zip} olarak ayarlanamadı. Açılan Chrome penceresinde 'Deliver to' bölümünü kontrol edin. Ayrıntı: {ex.Message}",
+                ex);
+        }
+    }
+
+    private static IWebElement? FirstDisplayed(IWebDriver driver, params By[] selectors)
+    {
+        foreach (var selector in selectors)
+        {
+            var element = driver.FindElements(selector).FirstOrDefault(x => x.Displayed && x.Enabled);
+            if (element is not null) return element;
+        }
+
+        return null;
+    }
+
+    private void ClickElement(IWebElement element)
+    {
+        try
+        {
+            element.Click();
+        }
+        catch (WebDriverException)
+        {
+            ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", element);
+        }
+    }
+
+    private static string ReadLocationText(IWebDriver driver)
+    {
+        var selectors = new[]
+        {
+            By.Id("glow-ingress-line1"),
+            By.Id("glow-ingress-line2"),
+            By.Id("nav-global-location-data-modal-action")
+        };
+
+        return string.Join(" ", selectors
+            .SelectMany(driver.FindElements)
+            .Where(x => x.Displayed)
+            .Select(x => x.Text));
     }
 
     private void WaitForDocumentReady()
@@ -126,7 +227,7 @@ public sealed class AmazonSearchClient : IDisposable
         }
         catch (WebDriverException)
         {
-            // Locale cookies are optional. Continue with Amazon defaults.
+            // Locale cookies are optional.
         }
     }
 
