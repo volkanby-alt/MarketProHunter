@@ -1,4 +1,3 @@
-using System.Web;
 using MarketProHunter.Models;
 
 namespace MarketProHunter.Amazon;
@@ -76,10 +75,20 @@ public static class SearchTargetResolver
 
     private static string AddOrReplacePage(string url, int page)
     {
-        var builder = new UriBuilder(url);
-        var query = HttpUtility.ParseQueryString(builder.Query);
-        query["page"] = page.ToString();
-        builder.Query = query.ToString();
-        return builder.Uri.ToString();
+        var fragmentIndex = url.IndexOf('#');
+        var fragment = fragmentIndex >= 0 ? url[fragmentIndex..] : string.Empty;
+        var withoutFragment = fragmentIndex >= 0 ? url[..fragmentIndex] : url;
+
+        var queryIndex = withoutFragment.IndexOf('?');
+        var baseUrl = queryIndex >= 0 ? withoutFragment[..queryIndex] : withoutFragment;
+        var query = queryIndex >= 0 ? withoutFragment[(queryIndex + 1)..] : string.Empty;
+
+        var parts = query
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Where(x => !x.StartsWith("page=", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        parts.Add($"page={page}");
+
+        return $"{baseUrl}?{string.Join("&", parts)}{fragment}";
     }
 }
