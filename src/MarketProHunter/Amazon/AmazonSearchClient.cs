@@ -40,6 +40,8 @@ public sealed class AmazonSearchClient : IDisposable
         WaitForDocumentReady();
     }
 
+    public string CurrentUrl => _driver.Url;
+
     public string BuildSearchUrl(string keyword, int page)
     {
         var encodedKeyword = Uri.EscapeDataString(keyword.Trim());
@@ -50,10 +52,24 @@ public sealed class AmazonSearchClient : IDisposable
 
     public async Task<string> FetchSearchPageAsync(string keyword, int page, CancellationToken cancellationToken = default)
     {
+        var url = BuildSearchUrl(keyword, page);
+        return await FetchUrlPageAsync(url, keyword, page, cancellationToken);
+    }
+
+    public async Task<string> FetchUrlPageAsync(
+        string url,
+        string displayName,
+        int page,
+        CancellationToken cancellationToken = default)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureSession();
 
-        var url = BuildSearchUrl(keyword, page);
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            throw new ArgumentException("Amazon URL boş olamaz.", nameof(url));
+        }
+
         _driver.Navigate().GoToUrl(url);
         WaitForDocumentReady();
 
@@ -61,15 +77,16 @@ public sealed class AmazonSearchClient : IDisposable
         {
             _wait.Until(driver =>
                 driver.FindElements(By.CssSelector("div[data-component-type='s-search-result']")).Count > 0
+                || driver.FindElements(By.CssSelector("div[data-asin]")).Count > 0
                 || LooksBlocked(driver.PageSource));
         }
         catch (WebDriverTimeoutException)
         {
-            // The caller will report that no cards were found.
+            // The caller inspects the returned HTML and decides whether to continue.
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        TrySetStatusTitle(keyword, page);
+        TrySetStatusTitle(displayName, page);
 
         var html = _driver.PageSource;
         ThrowIfBlocked(html);
