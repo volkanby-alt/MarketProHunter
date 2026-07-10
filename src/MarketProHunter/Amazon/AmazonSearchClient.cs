@@ -1,40 +1,36 @@
-using System.Net;
 using MarketProHunter.Models;
+using OpenQA.Selenium;
+using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Support.UI;
 
 namespace MarketProHunter.Amazon;
 
 public sealed class AmazonSearchClient : IDisposable
 {
     private readonly SearchSettings _settings;
-    private readonly HttpClient _httpClient;
+    private readonly ChromeDriver _driver;
+    private readonly WebDriverWait _wait;
     private bool _sessionInitialized;
 
     public AmazonSearchClient(SearchSettings settings)
     {
         _settings = settings;
-        var cookies = new CookieContainer();
-        var handler = new HttpClientHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All,
-            CookieContainer = cookies,
-            UseCookies = true,
-            AllowAutoRedirect = true
-        };
 
-        _httpClient = new HttpClient(handler)
-        {
-            Timeout = TimeSpan.FromSeconds(45)
-        };
+        var options = new ChromeOptions();
+        options.AddArgument("--start-maximized");
+        options.AddArgument("--disable-blink-features=AutomationControlled");
+        options.AddArgument("--disable-notifications");
+        options.AddArgument("--disable-popup-blocking");
+        options.AddArgument("--lang=en-US");
+        options.AddArgument("--no-default-browser-check");
+        options.AddArgument("--disable-search-engine-choice-screen");
+        options.AddExcludedArgument("enable-automation");
+        options.AddAdditionalOption("useAutomationExtension", false);
 
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
-        _httpClient.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
-        _httpClient.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9");
-        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Cache-Control", "no-cache");
-        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Pragma", "no-cache");
-        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Upgrade-Insecure-Requests", "1");
-        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Sec-Fetch-Dest", "document");
-        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Sec-Fetch-Mode", "navigate");
-        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Sec-Fetch-Site", "same-origin");
+        _driver = new ChromeDriver(options);
+        _driver.Manage().Timeouts().PageLoad = TimeSpan.FromSeconds(60);
+        _driver.Manage().Timeouts().AsynchronousJavaScript = TimeSpan.FromSeconds(30);
+        _wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(25));
     }
 
     public string BuildSearchUrl(string keyword, int page)
@@ -49,7 +45,7 @@ public sealed class AmazonSearchClient : IDisposable
     {
         await EnsureSessionAsync(cancellationToken);
         var url = BuildSearchUrl(keyword, page);
-        return await FetchDocumentAsync(url, _settings.MarketplaceBaseUrl, cancellationToken);
+        return await NavigateAndReadAsync(url, waitForSearchResults: true, cancellationToken);
     }
 
     public async Task<string> FetchProductPageAsync(string productUrl, CancellationToken cancellationToken = default)
@@ -61,52 +57,89 @@ public sealed class AmazonSearchClient : IDisposable
             ? productUrl
             : $"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/{productUrl.TrimStart('/')}";
 
-        return await FetchDocumentAsync(url, _settings.MarketplaceBaseUrl, cancellationToken);
+        return await NavigateAndReadAsync(url, waitForSearchResults: false, cancellationToken);
     }
 
     private async Task EnsureSessionAsync(CancellationToken cancellationToken)
     {
         if (_sessionInitialized) return;
 
-        var homeUrl = $"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/?language=en_US&currency=USD";
-        using var request = new HttpRequestMessage(HttpMethod.Get, homeUrl);
-        request.Headers.Referrer = new Uri(_settings.MarketplaceBaseUrl);
-        request.Headers.TryAddWithoutValidation("Cookie", BuildLocaleCookie());
+        await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _driver.Navigate().GoToUrl($"{_settings.MarketplaceBaseUrl.TrimEnd('/')}/?language=en_US&currency=USD");
+            WaitForDocumentReady();
 
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
-        _sessionInitialized = true;
+            AddOrReplaceCookie("lc-main", "en_US");
+            AddOrReplaceCookie("i18n-prefs", "USD");
+            AddOrReplaceCookie("zip-main", string.IsNullOrWhiteSpace(_settings.ZipCode) ? "07073" : _settings.ZipCode.Trim());
+
+            _sessionInitialized = true;
+        }, cancellationToken);
     }
 
-    private async Task<string> FetchDocumentAsync(string url, string referrer, CancellationToken cancellationToken)
+    private async Task<string> NavigateAndReadAsync(string url, bool waitForSearchResults, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Referrer = new Uri(referrer);
-        request.Headers.TryAddWithoutValidation("Cookie", BuildLocaleCookie());
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        var html = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
+        return await Task.Run(() =>
         {
-            throw new HttpRequestException($"Amazon HTTP {(int)response.StatusCode}: {response.ReasonPhrase}");
-        }
+            cancellationToken.ThrowIfCancellationRequested();
+            _driver.Navigate().GoToUrl(url);
+            WaitForDocumentReady();
 
-        if (LooksBlocked(html))
-        {
-            throw new InvalidOperationException("Amazon robot kontrolü veya koruma sayfası gösterdi.");
-        }
+            if (waitForSearchResults)
+            {
+                try
+                {
+                    _wait.Until(driver =>
+                        driver.FindElements(By.CssSelector("div[data-component-type='s-search-result']")).Count > 0
+                        || LooksBlocked(driver.PageSource));
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    // The caller will inspect the returned HTML and report that no cards were found.
+                }
+            }
 
-        return html;
+            cancellationToken.ThrowIfCancellationRequested();
+            var html = _driver.PageSource;
+            if (LooksBlocked(html))
+            {
+                throw new InvalidOperationException("Amazon robot kontrolü gösterdi. Açılan Chrome penceresinde kontrolü tamamlayıp taramayı yeniden başlatın.");
+            }
+
+            return html;
+        }, cancellationToken);
     }
 
-    private string BuildLocaleCookie()
+    private void WaitForDocumentReady()
     {
-        var zip = string.IsNullOrWhiteSpace(_settings.ZipCode) ? "07073" : _settings.ZipCode.Trim();
-        return string.Join("; ",
-            "lc-main=en_US",
-            "i18n-prefs=USD",
-            $"zip-main={zip}");
+        _wait.Until(driver =>
+        {
+            try
+            {
+                return ((IJavaScriptExecutor)driver)
+                    .ExecuteScript("return document.readyState")
+                    ?.ToString()
+                    ?.Equals("complete", StringComparison.OrdinalIgnoreCase) == true;
+            }
+            catch (WebDriverException)
+            {
+                return false;
+            }
+        });
+    }
+
+    private void AddOrReplaceCookie(string name, string value)
+    {
+        try
+        {
+            _driver.Manage().Cookies.DeleteCookieNamed(name);
+            _driver.Manage().Cookies.AddCookie(new Cookie(name, value, ".amazon.com", "/", null));
+        }
+        catch (WebDriverException)
+        {
+            // Locale cookies are helpful but not required for the scan to continue.
+        }
     }
 
     private static bool LooksBlocked(string html)
@@ -117,5 +150,17 @@ public sealed class AmazonSearchClient : IDisposable
             || html.Contains("api-services-support@amazon.com", StringComparison.OrdinalIgnoreCase);
     }
 
-    public void Dispose() => _httpClient.Dispose();
+    public void Dispose()
+    {
+        try
+        {
+            _driver.Quit();
+        }
+        catch
+        {
+            // Ignore shutdown errors.
+        }
+
+        _driver.Dispose();
+    }
 }
