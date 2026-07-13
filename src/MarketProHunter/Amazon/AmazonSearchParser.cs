@@ -103,9 +103,22 @@ public sealed class AmazonSearchParser
 
     private static string ExtractTitle(string block)
     {
+        // Current Amazon result cards normally expose the complete product title in
+        // the product image alt attribute. Prefer it over short brand/store labels.
+        var imageAltMatches = Regex.Matches(
+            block,
+            "<img[^>]+alt=\"(?<title>[^\"]{15,})\"",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        foreach (Match imageAlt in imageAltMatches)
+        {
+            var candidate = Clean(imageAlt.Groups["title"].Value);
+            if (candidate.Length >= 15 && !IsNonProductCard(candidate)) return candidate;
+        }
+
         var patterns = new[]
         {
-            "<h2[^>]*>[\\s\\S]*?<span[^>]*>(?<title>[\\s\\S]*?)</span>[\\s\\S]*?</h2>",
+            "<h2[^>]*>\\s*<a[^>]*>[\\s\\S]*?<span[^>]*>(?<title>[\\s\\S]*?)</span>[\\s\\S]*?</a>\\s*</h2>",
             "<a[^>]*class=\"[^\"]*a-link-normal[^\"]*s-line-clamp[^\"]*\"[^>]*>[\\s\\S]*?<span[^>]*>(?<title>[\\s\\S]*?)</span>",
             "<span[^>]*class=\"[^\"]*(?:a-size-base-plus|a-size-medium|a-text-normal)[^\"]*\"[^>]*>(?<title>[\\s\\S]*?)</span>"
         };
@@ -113,11 +126,12 @@ public sealed class AmazonSearchParser
         foreach (var pattern in patterns)
         {
             var match = Regex.Match(block, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            if (match.Success) return StripTags(match.Groups["title"].Value);
+            if (!match.Success) continue;
+            var candidate = StripTags(match.Groups["title"].Value);
+            if (candidate.Length >= 15) return candidate;
         }
 
-        var imageAlt = Regex.Match(block, "alt=\"(?<title>[^\"]{15,})\"", RegexOptions.IgnoreCase);
-        return imageAlt.Success ? imageAlt.Groups["title"].Value : string.Empty;
+        return string.Empty;
     }
 
     private static decimal ExtractPrice(string block)
