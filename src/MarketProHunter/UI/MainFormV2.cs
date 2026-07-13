@@ -9,8 +9,6 @@ public sealed class MainFormV2 : Form
     private readonly Button _chooseTargetButton = new();
     private readonly Button _startButton = new();
     private readonly Button _openProductButton = new();
-    private readonly Button _selectAllButton = new();
-    private readonly Button _clearSelectionButton = new();
     private readonly NumericUpDown _minPrice = new();
     private readonly NumericUpDown _maxPrice = new();
     private readonly TextBox _zipText = new();
@@ -19,7 +17,6 @@ public sealed class MainFormV2 : Form
     private readonly CheckBox _excludeSponsored = new();
     private readonly Label _targetLabel = new();
     private readonly Label _statusLabel = new();
-    private readonly Label _selectedCountLabel = new();
     private readonly ProgressBar _progress = new();
     private readonly DataGridView _grid = new();
     private readonly TextBox _log = new();
@@ -82,13 +79,13 @@ public sealed class MainFormV2 : Form
         var panel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 10,
+            ColumnCount = 9,
             RowCount = 2
         };
 
-        for (var i = 0; i < 10; i++)
+        for (var i = 0; i < 9; i++)
         {
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10f));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 11.11f));
         }
 
         _chooseTargetButton.Text = "1. Arama Hedefi";
@@ -99,12 +96,6 @@ public sealed class MainFormV2 : Form
 
         _openProductButton.Text = "Amazon'da Aç";
         _openProductButton.Click += (_, _) => OpenSelectedProduct();
-
-        _selectAllButton.Text = "Tümünü Seç";
-        _selectAllButton.Click += (_, _) => SetAllRowsChecked(true);
-
-        _clearSelectionButton.Text = "Seçimi Temizle";
-        _clearSelectionButton.Click += (_, _) => SetAllRowsChecked(false);
 
         ConfigureMoney(_minPrice, 1, 1000, 9);
         ConfigureMoney(_maxPrice, 1, 1000, 98);
@@ -126,21 +117,14 @@ public sealed class MainFormV2 : Form
         panel.SetColumnSpan(_startButton, 2);
         panel.Controls.Add(_openProductButton, 7, 0);
         panel.Controls.Add(_statusLabel, 8, 0);
-        panel.Controls.Add(_selectedCountLabel, 9, 0);
 
         panel.Controls.Add(_amazonChoice, 3, 1);
         panel.Controls.Add(_excludeLowStock, 4, 1);
         panel.Controls.Add(_excludeSponsored, 5, 1);
-        panel.Controls.Add(_selectAllButton, 7, 1);
-        panel.Controls.Add(_clearSelectionButton, 8, 1);
 
         _statusLabel.Text = "Hazır";
         _statusLabel.AutoSize = true;
         _statusLabel.Anchor = AnchorStyles.Left;
-
-        _selectedCountLabel.Text = "Seçili: 0";
-        _selectedCountLabel.AutoSize = true;
-        _selectedCountLabel.Anchor = AnchorStyles.Left;
 
         return panel;
     }
@@ -148,24 +132,14 @@ public sealed class MainFormV2 : Form
     private void ConfigureGrid()
     {
         _grid.Dock = DockStyle.Fill;
-        _grid.ReadOnly = false;
+        _grid.ReadOnly = true;
         _grid.AllowUserToAddRows = false;
         _grid.AllowUserToDeleteRows = false;
         _grid.MultiSelect = true;
-        _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _grid.SelectionMode = DataGridViewSelectionMode.CellSelect;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _grid.EditMode = DataGridViewEditMode.EditOnEnter;
-
-        var selectColumn = new DataGridViewCheckBoxColumn
-        {
-            Name = "selected",
-            HeaderText = "Seç",
-            Width = 45,
-            FillWeight = 35,
-            ThreeState = false,
-            ReadOnly = false
-        };
-        _grid.Columns.Add(selectColumn);
+        _grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
+        _grid.RowHeadersVisible = true;
 
         AddReadOnlyColumn("asin", "ASIN");
         AddReadOnlyColumn("brand", "Marka");
@@ -177,38 +151,48 @@ public sealed class MainFormV2 : Form
         AddReadOnlyColumn("title", "Başlık");
         AddReadOnlyColumn("url", "URL");
 
-        _grid.CurrentCellDirtyStateChanged += (_, _) =>
+        _grid.KeyDown += (_, e) =>
         {
-            if (_grid.IsCurrentCellDirty && _grid.CurrentCell is DataGridViewCheckBoxCell)
+            if (e.Control && e.KeyCode == Keys.C)
             {
-                _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+                CopySelectedCells();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
             }
         };
-        _grid.CellValueChanged += (_, e) =>
+
+        var copyMenu = new ContextMenuStrip();
+        copyMenu.Items.Add("Kopyala", null, (_, _) => CopySelectedCells());
+        _grid.ContextMenuStrip = copyMenu;
+    }
+
+    private void CopySelectedCells()
+    {
+        if (_grid.GetCellCount(DataGridViewElementStates.Selected) == 0) return;
+
+        try
         {
-            if (e.RowIndex >= 0 && e.ColumnIndex == _grid.Columns["selected"].Index)
+            var data = _grid.GetClipboardContent();
+            if (data is not null)
             {
-                UpdateSelectedCount();
+                Clipboard.SetDataObject(data);
+                _statusLabel.Text = $"Kopyalandı: {_grid.GetCellCount(DataGridViewElementStates.Selected)} hücre";
             }
-        };
-        _grid.CellClick += (_, e) =>
+        }
+        catch (ExternalException ex)
         {
-            if (e.RowIndex < 0 || e.ColumnIndex == _grid.Columns["selected"].Index) return;
-            var cell = _grid.Rows[e.RowIndex].Cells["selected"];
-            cell.Value = !(cell.Value as bool? ?? false);
-            UpdateSelectedCount();
-        };
+            MessageBox.Show($"Kopyalama başarısız: {ex.Message}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void AddReadOnlyColumn(string name, string header)
     {
-        var column = new DataGridViewTextBoxColumn
+        _grid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = name,
             HeaderText = header,
             ReadOnly = true
-        };
-        _grid.Columns.Add(column);
+        });
     }
 
     private async Task ChooseTargetAsync(bool startAfterSelection)
@@ -256,7 +240,6 @@ public sealed class MainFormV2 : Form
         }
 
         _grid.Rows.Clear();
-        UpdateSelectedCount();
         _log.Clear();
         AppendLog("Tarama başlatılıyor: " + BuildTargetSummary(_target));
         SetRunning(true);
@@ -309,7 +292,6 @@ public sealed class MainFormV2 : Form
     private void AddProduct(ProductResult product)
     {
         var index = _grid.Rows.Add(
-            false,
             product.Asin,
             product.Brand,
             $"${product.Price:0.00}",
@@ -322,28 +304,9 @@ public sealed class MainFormV2 : Form
         _grid.Rows[index].Tag = product;
     }
 
-    private void SetAllRowsChecked(bool isChecked)
-    {
-        foreach (DataGridViewRow row in _grid.Rows)
-        {
-            row.Cells["selected"].Value = isChecked;
-        }
-        _grid.RefreshEdit();
-        UpdateSelectedCount();
-    }
-
-    private void UpdateSelectedCount()
-    {
-        var count = _grid.Rows.Cast<DataGridViewRow>()
-            .Count(row => row.Cells["selected"].Value as bool? == true);
-        _selectedCountLabel.Text = $"Seçili: {count}";
-    }
-
     private void OpenSelectedProduct()
     {
-        var checkedRow = _grid.Rows.Cast<DataGridViewRow>()
-            .FirstOrDefault(row => row.Cells["selected"].Value as bool? == true);
-        var product = checkedRow?.Tag as ProductResult ?? _grid.CurrentRow?.Tag as ProductResult;
+        var product = _grid.CurrentRow?.Tag as ProductResult;
         if (product is null || string.IsNullOrWhiteSpace(product.ProductUrl)) return;
         Process.Start(new ProcessStartInfo(product.ProductUrl) { UseShellExecute = true });
     }
@@ -358,8 +321,6 @@ public sealed class MainFormV2 : Form
         _amazonChoice.Enabled = !running;
         _excludeLowStock.Enabled = !running;
         _excludeSponsored.Enabled = !running;
-        _selectAllButton.Enabled = !running;
-        _clearSelectionButton.Enabled = !running;
         _startButton.Text = running ? "Durdur" : "2. Taramayı Başlat";
         if (running) _statusLabel.Text = "Çalışıyor";
     }
