@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using MarketProHunter.Amazon;
+using MarketProHunter.Ebay;
 using MarketProHunter.Models;
 
 namespace MarketProHunter.UI;
@@ -8,6 +9,7 @@ public sealed class MainFormV2 : Form
 {
     private readonly Button _chooseTargetButton = new();
     private readonly Button _startButton = new();
+    private readonly Button _ebayButton = new();
     private readonly Button _openProductButton = new();
     private readonly NumericUpDown _minPrice = new();
     private readonly NumericUpDown _maxPrice = new();
@@ -27,7 +29,7 @@ public sealed class MainFormV2 : Form
     public MainFormV2()
     {
         Text = "MarketProHunter V2 - Mağaza ve Ürün Tarama";
-        Width = 1450;
+        Width = 1500;
         Height = 900;
         StartPosition = FormStartPosition.CenterScreen;
         BuildLayout();
@@ -79,20 +81,23 @@ public sealed class MainFormV2 : Form
         var panel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 9,
+            ColumnCount = 10,
             RowCount = 2
         };
 
-        for (var i = 0; i < 9; i++)
+        for (var i = 0; i < 10; i++)
         {
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 11.11f));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10f));
         }
 
         _chooseTargetButton.Text = "1. Arama Hedefi";
         _chooseTargetButton.Click += async (_, _) => await ChooseTargetAsync(startAfterSelection: true);
 
-        _startButton.Text = "2. Taramayı Başlat";
+        _startButton.Text = "2. Amazon Tara";
         _startButton.Click += async (_, _) => await ToggleScanAsync();
+
+        _ebayButton.Text = "3. eBay Fiyat Kontrolü";
+        _ebayButton.Click += async (_, _) => await RunEbayCheckAsync();
 
         _openProductButton.Text = "Amazon'da Aç";
         _openProductButton.Click += (_, _) => OpenSelectedProduct();
@@ -115,12 +120,14 @@ public sealed class MainFormV2 : Form
         panel.SetColumnSpan(_chooseTargetButton, 2);
         panel.Controls.Add(_startButton, 5, 0);
         panel.SetColumnSpan(_startButton, 2);
-        panel.Controls.Add(_openProductButton, 7, 0);
-        panel.Controls.Add(_statusLabel, 8, 0);
+        panel.Controls.Add(_ebayButton, 7, 0);
+        panel.SetColumnSpan(_ebayButton, 2);
+        panel.Controls.Add(_statusLabel, 9, 0);
 
         panel.Controls.Add(_amazonChoice, 3, 1);
         panel.Controls.Add(_excludeLowStock, 4, 1);
         panel.Controls.Add(_excludeSponsored, 5, 1);
+        panel.Controls.Add(_openProductButton, 7, 1);
 
         _statusLabel.Text = "Hazır";
         _statusLabel.AutoSize = true;
@@ -143,10 +150,12 @@ public sealed class MainFormV2 : Form
 
         AddReadOnlyColumn("asin", "ASIN");
         AddReadOnlyColumn("brand", "Marka");
-        AddReadOnlyColumn("price", "Fiyat");
+        AddReadOnlyColumn("price", "Amazon Fiyatı");
         AddReadOnlyColumn("rating", "Puan");
         AddReadOnlyColumn("reviews", "Yorum");
         AddReadOnlyColumn("choice", "Choice");
+        AddReadOnlyColumn("ebayStatus", "eBay Durumu");
+        AddReadOnlyColumn("ebayRange", "eBay Fiyat Aralığı");
         AddReadOnlyColumn("page", "Sayfa");
         AddReadOnlyColumn("title", "Başlık");
         AddReadOnlyColumn("url", "URL");
@@ -168,21 +177,22 @@ public sealed class MainFormV2 : Form
 
     private void CopySelectedCells()
     {
-        if (_grid.GetCellCount(DataGridViewElementStates.Selected) == 0) return;
+        var cells = _grid.SelectedCells.Cast<DataGridViewCell>()
+            .Where(cell => cell.RowIndex >= 0 && cell.ColumnIndex >= 0)
+            .OrderBy(cell => cell.RowIndex)
+            .ThenBy(cell => cell.ColumnIndex)
+            .ToList();
 
-        try
-        {
-            var data = _grid.GetClipboardContent();
-            if (data is not null)
-            {
-                Clipboard.SetDataObject(data);
-                _statusLabel.Text = $"Kopyalandı: {_grid.GetCellCount(DataGridViewElementStates.Selected)} hücre";
-            }
-        }
-        catch (ExternalException ex)
-        {
-            MessageBox.Show($"Kopyalama başarısız: {ex.Message}", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
+        if (cells.Count == 0) return;
+
+        var lines = cells
+            .GroupBy(cell => cell.RowIndex)
+            .Select(row => string.Join("\t", row.Select(cell => cell.Value?.ToString() ?? string.Empty)));
+        var text = string.Join(Environment.NewLine, lines);
+
+        if (string.IsNullOrEmpty(text)) return;
+        Clipboard.SetText(text);
+        _statusLabel.Text = $"Kopyalandı: {cells.Count} hücre";
     }
 
     private void AddReadOnlyColumn(string name, string header)
@@ -241,8 +251,8 @@ public sealed class MainFormV2 : Form
 
         _grid.Rows.Clear();
         _log.Clear();
-        AppendLog("Tarama başlatılıyor: " + BuildTargetSummary(_target));
-        SetRunning(true);
+        AppendLog("Amazon taraması başlatılıyor: " + BuildTargetSummary(_target));
+        SetRunning(true, "Amazon taranıyor");
         _cancellation = new CancellationTokenSource();
 
         try
@@ -268,7 +278,7 @@ public sealed class MainFormV2 : Form
             }
 
             _statusLabel.Text = $"Bitti: {products.Count} ASIN";
-            AppendLog($"Tarama tamamlandı. Benzersiz ASIN: {products.Count}");
+            AppendLog($"Amazon taraması tamamlandı. Benzersiz ASIN: {products.Count}");
         }
         catch (OperationCanceledException)
         {
@@ -289,6 +299,83 @@ public sealed class MainFormV2 : Form
         }
     }
 
+    private async Task RunEbayCheckAsync()
+    {
+        if (_cancellation is not null)
+        {
+            _cancellation.Cancel();
+            return;
+        }
+
+        if (_grid.Rows.Count == 0)
+        {
+            MessageBox.Show("Önce Amazon ürünlerini tarayın.", "MarketProHunter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var selectedRowIndexes = _grid.SelectedCells.Cast<DataGridViewCell>()
+            .Select(cell => cell.RowIndex)
+            .Where(index => index >= 0)
+            .Distinct()
+            .OrderBy(index => index)
+            .ToList();
+
+        var rows = selectedRowIndexes.Count > 0
+            ? selectedRowIndexes.Select(index => _grid.Rows[index]).ToList()
+            : _grid.Rows.Cast<DataGridViewRow>().Where(row => !row.IsNewRow).ToList();
+
+        var scopeText = selectedRowIndexes.Count > 0 ? "seçili" : "tüm";
+        AppendLog($"eBay fiyat kontrolü başladı: {rows.Count} {scopeText} ürün.");
+        SetRunning(true, "eBay kontrol ediliyor");
+        _cancellation = new CancellationTokenSource();
+
+        try
+        {
+            using var scanner = new EbayPriceScanner();
+            var completed = 0;
+
+            foreach (var row in rows)
+            {
+                _cancellation.Token.ThrowIfCancellationRequested();
+                if (row.Tag is not ProductResult product) continue;
+
+                completed++;
+                _statusLabel.Text = $"eBay: {completed}/{rows.Count}";
+                AppendLog($"eBay kontrolü {completed}/{rows.Count}: {product.Asin} | {product.Title}");
+
+                var result = await scanner.ScanAsync(product, _cancellation.Token);
+                row.Cells["ebayStatus"].Value = result.StatusText;
+                row.Cells["ebayRange"].Value = result.PriceRangeText;
+                row.Cells["ebayStatus"].ToolTipText = result.Error ?? result.SearchUrl;
+                row.Cells["ebayRange"].ToolTipText = result.SearchUrl;
+
+                AppendLog(result.Error is null
+                    ? $"{product.Asin}: {result.StatusText} | {result.PriceRangeText}"
+                    : $"{product.Asin}: eBay hatası | {result.Error}");
+            }
+
+            _statusLabel.Text = $"eBay bitti: {completed}";
+            AppendLog($"eBay fiyat kontrolü tamamlandı: {completed} ürün.");
+        }
+        catch (OperationCanceledException)
+        {
+            _statusLabel.Text = "Durduruldu";
+            AppendLog("eBay fiyat kontrolü durduruldu.");
+        }
+        catch (Exception ex)
+        {
+            _statusLabel.Text = "Hata";
+            AppendLog("eBay HATA: " + ex.Message);
+            MessageBox.Show(ex.Message, "eBay Kontrol Hatası", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _cancellation?.Dispose();
+            _cancellation = null;
+            SetRunning(false);
+        }
+    }
+
     private void AddProduct(ProductResult product)
     {
         var index = _grid.Rows.Add(
@@ -298,6 +385,8 @@ public sealed class MainFormV2 : Form
             product.Rating,
             product.ReviewCount,
             product.IsAmazonChoice ? "Evet" : "Hayır",
+            "Bekliyor",
+            "-",
             product.Page,
             product.Title,
             product.ProductUrl);
@@ -311,7 +400,7 @@ public sealed class MainFormV2 : Form
         Process.Start(new ProcessStartInfo(product.ProductUrl) { UseShellExecute = true });
     }
 
-    private void SetRunning(bool running)
+    private void SetRunning(bool running, string? runningText = null)
     {
         _progress.Visible = running;
         _chooseTargetButton.Enabled = !running;
@@ -321,8 +410,9 @@ public sealed class MainFormV2 : Form
         _amazonChoice.Enabled = !running;
         _excludeLowStock.Enabled = !running;
         _excludeSponsored.Enabled = !running;
-        _startButton.Text = running ? "Durdur" : "2. Taramayı Başlat";
-        if (running) _statusLabel.Text = "Çalışıyor";
+        _ebayButton.Enabled = !running || _cancellation is not null;
+        _startButton.Text = running ? "Durdur" : "2. Amazon Tara";
+        if (running) _statusLabel.Text = runningText ?? "Çalışıyor";
     }
 
     private void AppendLog(string message)
