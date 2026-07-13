@@ -148,59 +148,35 @@ public sealed class AmazonSearchClient : IDisposable
 
         try
         {
-            var locationButton = _wait.Until(driver =>
-                FirstDisplayed(driver,
-                    By.Id("nav-global-location-popover-link"),
-                    By.Id("nav-global-location-data-modal-action"),
-                    By.CssSelector("a[data-csa-c-content-id='nav-global-location']")));
+            ClickFirstDisplayedWithRetry(
+                TimeSpan.FromSeconds(30),
+                By.Id("nav-global-location-popover-link"),
+                By.Id("nav-global-location-data-modal-action"),
+                By.CssSelector("a[data-csa-c-content-id='nav-global-location']"));
 
-            if (locationButton is null)
+            SetZipInputWithRetry(zip);
+
+            ClickFirstDisplayedWithRetry(
+                TimeSpan.FromSeconds(30),
+                By.CssSelector("#GLUXZipUpdate input.a-button-input"),
+                By.Id("GLUXZipUpdate"),
+                By.CssSelector("span[data-action='GLUXPostalUpdateAction'] input"));
+
+            TryCloseLocationDialog();
+
+            new WebDriverWait(_driver, TimeSpan.FromSeconds(12)).Until(driver =>
             {
-                throw new WebDriverTimeoutException("Teslimat konumu düğmesi bulunamadı.");
-            }
-
-            ClickElement(locationButton);
-
-            var zipInput = _wait.Until(driver =>
-                FirstDisplayed(driver,
-                    By.Id("GLUXZipUpdateInput"),
-                    By.CssSelector("input[data-action='GLUXPostalInputAction']"),
-                    By.CssSelector("input[placeholder*='ZIP']")));
-
-            if (zipInput is null)
-            {
-                throw new WebDriverTimeoutException("ZIP giriş alanı bulunamadı.");
-            }
-
-            zipInput.Clear();
-            zipInput.SendKeys(zip);
-
-            var applyButton = _wait.Until(driver =>
-                FirstDisplayed(driver,
-                    By.CssSelector("#GLUXZipUpdate input.a-button-input"),
-                    By.Id("GLUXZipUpdate"),
-                    By.CssSelector("span[data-action='GLUXPostalUpdateAction'] input")));
-
-            if (applyButton is null)
-            {
-                throw new WebDriverTimeoutException("ZIP uygulama düğmesi bulunamadı.");
-            }
-
-            ClickElement(applyButton);
-
-            try
-            {
-                var closeButton = new WebDriverWait(_driver, TimeSpan.FromSeconds(8)).Until(driver =>
-                    FirstDisplayed(driver,
-                        By.CssSelector("#GLUXConfirmClose input.a-button-input"),
-                        By.Id("GLUXConfirmClose"),
-                        By.CssSelector("button[name='glowDoneButton']")));
-                if (closeButton is not null) ClickElement(closeButton);
-            }
-            catch (WebDriverTimeoutException)
-            {
-                // Some Amazon layouts close the modal automatically.
-            }
+                try
+                {
+                    var text = ReadLocationText(driver);
+                    return text.Contains(zip, StringComparison.OrdinalIgnoreCase)
+                        || driver.FindElements(By.Id("GLUXZipUpdateInput")).All(x => !x.Displayed);
+                }
+                catch (StaleElementReferenceException)
+                {
+                    return false;
+                }
+            });
 
             _driver.Navigate().Refresh();
             WaitForDocumentReady();
@@ -210,6 +186,98 @@ public sealed class AmazonSearchClient : IDisposable
             throw new InvalidOperationException(
                 $"Amazon teslimat adresi {zip} olarak ayarlanamadı. Açılan Chrome penceresinde 'Deliver to' bölümünü kontrol edin. Ayrıntı: {ex.Message}",
                 ex);
+        }
+    }
+
+    private void SetZipInputWithRetry(string zip)
+    {
+        var selectors = new[]
+        {
+            By.Id("GLUXZipUpdateInput"),
+            By.CssSelector("input[data-action='GLUXPostalInputAction']"),
+            By.CssSelector("input[placeholder*='ZIP']")
+        };
+
+        var wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(30));
+        wait.IgnoreExceptionTypes(typeof(StaleElementReferenceException), typeof(ElementNotInteractableException));
+        wait.Until(driver =>
+        {
+            var input = FirstDisplayed(driver, selectors);
+            if (input is null) return false;
+
+            try
+            {
+                ((IJavaScriptExecutor)driver).ExecuteScript(
+                    "arguments[0].focus(); arguments[0].value=''; arguments[0].dispatchEvent(new Event('input',{bubbles:true}));",
+                    input);
+                input.SendKeys(zip);
+                return string.Equals(input.GetAttribute("value"), zip, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (StaleElementReferenceException)
+            {
+                return false;
+            }
+        });
+    }
+
+    private void ClickFirstDisplayedWithRetry(TimeSpan timeout, params By[] selectors)
+    {
+        var wait = new WebDriverWait(_driver, timeout);
+        wait.IgnoreExceptionTypes(
+            typeof(StaleElementReferenceException),
+            typeof(ElementClickInterceptedException),
+            typeof(ElementNotInteractableException));
+
+        var clicked = wait.Until(driver =>
+        {
+            var element = FirstDisplayed(driver, selectors);
+            if (element is null) return false;
+
+            try
+            {
+                ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].scrollIntoView({block:'center'});", element);
+                element.Click();
+                return true;
+            }
+            catch (StaleElementReferenceException)
+            {
+                return false;
+            }
+            catch (WebDriverException)
+            {
+                try
+                {
+                    element = FirstDisplayed(driver, selectors);
+                    if (element is null) return false;
+                    ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].click();", element);
+                    return true;
+                }
+                catch (StaleElementReferenceException)
+                {
+                    return false;
+                }
+            }
+        });
+
+        if (!clicked)
+        {
+            throw new WebDriverTimeoutException("Amazon konum penceresindeki gerekli düğme bulunamadı.");
+        }
+    }
+
+    private void TryCloseLocationDialog()
+    {
+        try
+        {
+            ClickFirstDisplayedWithRetry(
+                TimeSpan.FromSeconds(8),
+                By.CssSelector("#GLUXConfirmClose input.a-button-input"),
+                By.Id("GLUXConfirmClose"),
+                By.CssSelector("button[name='glowDoneButton']"));
+        }
+        catch (WebDriverTimeoutException)
+        {
+            // Some Amazon layouts close automatically.
         }
     }
 
@@ -231,23 +299,27 @@ public sealed class AmazonSearchClient : IDisposable
     {
         foreach (var selector in selectors)
         {
-            var element = driver.FindElements(selector).FirstOrDefault(x => x.Displayed && x.Enabled);
-            if (element is not null) return element;
+            try
+            {
+                foreach (var element in driver.FindElements(selector))
+                {
+                    try
+                    {
+                        if (element.Displayed && element.Enabled) return element;
+                    }
+                    catch (StaleElementReferenceException)
+                    {
+                        // Amazon rerendered the element; continue with a fresh lookup.
+                    }
+                }
+            }
+            catch (StaleElementReferenceException)
+            {
+                // Continue with the next selector.
+            }
         }
 
         return null;
-    }
-
-    private void ClickElement(IWebElement element)
-    {
-        try
-        {
-            element.Click();
-        }
-        catch (WebDriverException)
-        {
-            ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", element);
-        }
     }
 
     private static string ReadLocationText(IWebDriver driver)
@@ -259,10 +331,23 @@ public sealed class AmazonSearchClient : IDisposable
             By.Id("nav-global-location-data-modal-action")
         };
 
-        return string.Join(" ", selectors
-            .SelectMany(driver.FindElements)
-            .Where(x => x.Displayed)
-            .Select(x => x.Text));
+        var values = new List<string>();
+        foreach (var selector in selectors)
+        {
+            foreach (var element in driver.FindElements(selector))
+            {
+                try
+                {
+                    if (element.Displayed) values.Add(element.Text);
+                }
+                catch (StaleElementReferenceException)
+                {
+                    // Ignore elements replaced during an Amazon header refresh.
+                }
+            }
+        }
+
+        return string.Join(" ", values);
     }
 
     private void WaitForDocumentReady()
