@@ -42,6 +42,11 @@ public sealed class EbayPriceScanner : IDisposable
         var query = BuildSearchQuery(product);
         var searchUrl = $"https://www.ebay.com/sch/i.html?_nkw={Uri.EscapeDataString(query)}&LH_BIN=1";
 
+        if (IsTooGeneric(query))
+        {
+            return new EbayPriceResult(false, null, null, searchUrl, "Ürün başlığı yeterince ayrıntılı değil.");
+        }
+
         try
         {
             _driver.Navigate().GoToUrl(searchUrl);
@@ -77,7 +82,7 @@ public sealed class EbayPriceScanner : IDisposable
                 }
             }
 
-            await Task.Delay(800, cancellationToken);
+            await Task.Delay(500, cancellationToken);
 
             if (prices.Count == 0)
             {
@@ -98,11 +103,24 @@ public sealed class EbayPriceScanner : IDisposable
 
     private static string BuildSearchQuery(ProductResult product)
     {
-        var title = product.Title?.Trim() ?? string.Empty;
-        if (title.Length > 120) title = title[..120];
-        return string.IsNullOrWhiteSpace(product.Brand)
+        var title = Regex.Replace(product.Title?.Trim() ?? string.Empty, @"\s+", " ");
+        var brand = product.Brand?.Trim() ?? string.Empty;
+
+        if (title.Length > 140) title = title[..140];
+        if (string.IsNullOrWhiteSpace(brand)) return title;
+
+        // Do not produce queries such as "Dorman Dorman" when the title already
+        // starts with the brand name.
+        return title.StartsWith(brand + " ", StringComparison.OrdinalIgnoreCase)
+               || title.Equals(brand, StringComparison.OrdinalIgnoreCase)
             ? title
-            : $"{product.Brand} {title}";
+            : $"{brand} {title}";
+    }
+
+    private static bool IsTooGeneric(string query)
+    {
+        var tokens = Tokenize(query);
+        return tokens.Count < 3 || query.Length < 12;
     }
 
     private static string ReadText(IWebElement parent, string selector)
@@ -123,19 +141,19 @@ public sealed class EbayPriceScanner : IDisposable
 
         return Regex.Matches(text.ToLowerInvariant(), "[a-z0-9]{3,}")
             .Select(match => match.Value)
-            .Where(token => token is not "with" and not "from" and not "this" and not "that" and not "pack")
+            .Where(token => token is not "with" and not "from" and not "this" and not "that" and not "pack" and not "compatible" and not "select")
             .Distinct()
-            .Take(12)
+            .Take(16)
             .ToList();
     }
 
     private static bool LooksLikeSameProduct(IReadOnlyList<string> productTokens, string ebayTitle)
     {
-        if (productTokens.Count == 0) return false;
+        if (productTokens.Count < 3) return false;
 
         var ebayTokens = Tokenize(ebayTitle).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var matched = productTokens.Count(ebayTokens.Contains);
-        var required = productTokens.Count <= 4 ? 2 : Math.Max(3, (int)Math.Ceiling(productTokens.Count * 0.45));
+        var required = Math.Max(3, (int)Math.Ceiling(productTokens.Count * 0.45));
         return matched >= required;
     }
 
