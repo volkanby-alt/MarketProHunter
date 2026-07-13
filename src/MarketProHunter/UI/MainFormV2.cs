@@ -89,7 +89,7 @@ public sealed class MainFormV2 : Form
         }
 
         _chooseTargetButton.Text = "1. Arama Hedefi";
-        _chooseTargetButton.Click += (_, _) => ChooseTarget();
+        _chooseTargetButton.Click += async (_, _) => await ChooseTargetAsync(startAfterSelection: true);
 
         _startButton.Text = "2. Taramayı Başlat";
         _startButton.Click += async (_, _) => await ToggleScanAsync();
@@ -149,14 +149,21 @@ public sealed class MainFormV2 : Form
         _grid.Columns.Add("url", "URL");
     }
 
-    private void ChooseTarget()
+    private async Task ChooseTargetAsync(bool startAfterSelection)
     {
+        if (_cancellation is not null) return;
+
         using var dialog = new SearchTargetDialog();
         if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Target is null) return;
 
         _target = dialog.Target;
         _targetLabel.Text = BuildTargetSummary(_target);
         AppendLog("Arama hedefi seçildi: " + _targetLabel.Text);
+
+        if (startAfterSelection)
+        {
+            await StartScanAsync();
+        }
     }
 
     private async Task ToggleScanAsync()
@@ -169,9 +176,16 @@ public sealed class MainFormV2 : Form
 
         if (_target is null)
         {
-            ChooseTarget();
+            await ChooseTargetAsync(startAfterSelection: false);
             if (_target is null) return;
         }
+
+        await StartScanAsync();
+    }
+
+    private async Task StartScanAsync()
+    {
+        if (_target is null || _cancellation is not null) return;
 
         if (_minPrice.Value > _maxPrice.Value)
         {
@@ -181,6 +195,7 @@ public sealed class MainFormV2 : Form
 
         _grid.Rows.Clear();
         _log.Clear();
+        AppendLog("Tarama başlatılıyor: " + BuildTargetSummary(_target));
         SetRunning(true);
         _cancellation = new CancellationTokenSource();
 
@@ -197,7 +212,6 @@ public sealed class MainFormV2 : Form
                 MaxParallelSearches = 1
             };
 
-            AppendLog("Tarama başlatıldı: " + BuildTargetSummary(_target));
             var progress = new Progress<string>(AppendLog);
             var scanner = new SearchTargetScanner();
             var products = await scanner.ScanAsync(_target, settings, progress, _cancellation.Token);
