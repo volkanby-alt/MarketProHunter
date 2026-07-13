@@ -1,5 +1,13 @@
-using System.Windows.Forms;
 using MarketProHunter.UI;
 
-ApplicationConfiguration.Initialize();
-Application.Run(new MainFormV2());
+namespace MarketProHunter;
+
+internal static class Program
+{
+    [STAThread]
+    private static void Main()
+    {
+        ApplicationConfiguration.Initialize();
+        Application.Run(new MainFormV2());
+    }
+}
